@@ -1,4 +1,4 @@
-# Self-Evolving InstaGone Agent
+# Gradient: Self-evolving-agent Hackathon 07/24/26
 
 Turns classified Instagram-post data into interest plans, publishes `cited.md`, and evolves
 itself on real accept/reject feedback. Full architecture, honest real-vs-stub breakdown of
