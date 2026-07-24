@@ -1,0 +1,13 @@
+services:
+  vectorai:
+    image: actian/vectorai:latest
+    container_name: self-evolve-agent-vectorai
+    ports:
+      - "6573:6573"   # REST API
+      - "6574:6574"   # gRPC (used by agent/adapters/vectorai.py)
+      - "6575:6575"   # local UI
+    volumes:
+      - ./vectorai_data:/var/lib/actian-vectorai
+    environment:
+      - ACTIAN_VECTORAI_ACCEPT_EULA=YES
+    restart: unless-stopped

@@ -1,0 +1,20 @@
+API.md
+__pycache__/
+*.pyc
+venv/
+.venv/
+data/state/
+data/drop/*
+!data/drop/.gitkeep
+vectorai_data/
+.claude/settings.local.json
+
+# Internal planning/research notes — kept locally, not published
+BENCHMARKS.md
+DEMO.md
+GAPS_AND_FILL.md
+brief.md
+hackathon-research.md
+ideas.md
+payments-research.md
+.claude/scheduled_tasks.lock
