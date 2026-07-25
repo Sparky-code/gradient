@@ -6,8 +6,10 @@ localhost:6574. This is genuine episodic memory: every high-quality post
 gets embedded and stored with its plan status, so recall_similar() can
 answer "have we seen something like this before, and what happened to it"
 — exactly the signal a self-improving planner (and Pioneer's retraining
-loop) wants, and Senso's ground() doesn't provide since it has no concept
-of past accept/reject outcomes.
+loop) wants. Grounding (ground_locally(), below) also runs against this same
+collection now — it used to be a separate hosted KB (Senso), which was
+redundant with what this collection already held; see ROADMAP.md for why
+that got decoupled.
 
 Embeddings are real local model output, not a cloud API call: embed_batch()
 subprocesses into this repo's own venv/ (the same isolated env
@@ -26,7 +28,7 @@ recall_similar() are single-item conveniences built on top for callers
 Every call degrades to a stub result on VectorAIError or a failed/timed-out
 embed subprocess (container not running, model not cached, etc.) so a
 missing dependency never breaks the loop — the same resilience contract as
-the Senso and reclassify adapters.
+the reclassify adapter.
 """
 
 import json
@@ -232,6 +234,68 @@ def recall_similar_many(
 def recall_similar(query_text: str, limit: int = 3, exclude_hrefs: set[str] | None = None) -> dict:
     """Single-query convenience wrapper around recall_similar_many()."""
     return recall_similar_many([query_text], limit, {query_text: exclude_hrefs or set()})[query_text]
+
+
+def _flatten_citation(payload: dict, max_len: int = 200) -> str:
+    """Collapse a memory point's payload into one citation line — subcategory
+    as the lead, action as the body, since that's the real content every point
+    already carries (see remember_posts()). Same shape Senso's ground() used
+    to produce (a title + a flattened chunk), so this is a like-for-like swap
+    at both call sites, not a format change downstream code needs to handle."""
+    subcat = payload.get("subcategory") or ""
+    action = " ".join((payload.get("action") or "").split())
+    if len(action) > max_len:
+        action = action[:max_len].rsplit(" ", 1)[0] + "…"
+    return f"{subcat}: {action}".strip(": ")
+
+
+def _ground_search(vector: list[float], limit: int, exclude_hrefs: set[str]) -> dict:
+    try:
+        with _client() as client:
+            hits = client.points.search(
+                COLLECTION, vector=vector, limit=limit + len(exclude_hrefs),
+                score_threshold=MIN_RECALL_SCORE,
+            )
+        citations = [
+            _flatten_citation(hit.payload)
+            for hit in hits
+            if hit.payload and hit.payload.get("href") not in exclude_hrefs
+        ][:limit]
+        return {"grounded": bool(citations), "citations": citations, "source": "vectorai"}
+    except VectorAIError as e:
+        return {"grounded": False, "citations": [], "source": "stub", "reason": str(e)}
+
+
+def ground_locally_many(
+    query_texts: list[str], limit: int = 3,
+    exclude_hrefs_by_text: dict[str, set[str]] | None = None,
+) -> dict[str, dict]:
+    """Batch version of ground_locally(): one embed subprocess call for every
+    query text, then one local search per vector — same batching discipline
+    as recall_similar_many(), which this deliberately mirrors (same collection,
+    same exclude-by-text shape). Grounds an interest in *other* posts the user
+    actually saved, not a post's own content citing itself — replaces
+    senso.ground(), which searched a hosted KB containing nothing this corpus
+    didn't already push into it. Returns {query_text: grounding_result}."""
+    exclude_hrefs_by_text = exclude_hrefs_by_text or {}
+    if not query_texts:
+        return {}
+
+    vectors = embed_batch(query_texts, kind="query")
+    if vectors is None:
+        stub = {"grounded": False, "citations": [], "source": "stub",
+                "reason": "embedding unavailable (venv/model missing or timed out)"}
+        return {text: stub for text in query_texts}
+
+    return {
+        text: _ground_search(vector, limit, exclude_hrefs_by_text.get(text, set()))
+        for text, vector in zip(query_texts, vectors)
+    }
+
+
+def ground_locally(query_text: str, limit: int = 3, exclude_hrefs: set[str] | None = None) -> dict:
+    """Single-query convenience wrapper around ground_locally_many()."""
+    return ground_locally_many([query_text], limit, {query_text: exclude_hrefs or set()})[query_text]
 
 
 # ── taxonomy evolution — a second real collection, not a second copy of the first ──

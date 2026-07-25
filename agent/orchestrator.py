@@ -26,7 +26,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from agent.adapters import guild
+from agent import session_log
 
 
 @dataclass(frozen=True)
@@ -77,13 +77,13 @@ class Coordinator:
     def create_run(self, agent_name: str, input: list[Message]) -> Run:
         """Mirrors ACP's POST /runs. Synchronous only — no streaming/await-resume,
         since there's no long-running remote work to page over here. A handler
-        that raises fails only its own run (logged via Guild) rather than
+        that raises fails only its own run (logged to the session log) rather than
         taking down the caller, the same isolation a per-agent remote call
         would give you."""
         run_id = str(uuid.uuid4())
         manifest = self._agents.get(agent_name)
         if manifest is None:
-            guild.log_session({
+            session_log.log_session({
                 "event": "orchestrator_run", "run_id": run_id, "agent_name": agent_name,
                 "status": "failed", "reason": "unknown agent",
             })
@@ -92,13 +92,13 @@ class Coordinator:
 
         try:
             output = manifest.handler(input)
-            guild.log_session({
+            session_log.log_session({
                 "event": "orchestrator_run", "run_id": run_id,
                 "agent_name": agent_name, "status": "completed",
             })
             return Run(run_id=run_id, agent_name=agent_name, status="completed", output=output)
         except Exception as e:
-            guild.log_session({
+            session_log.log_session({
                 "event": "orchestrator_run", "run_id": run_id, "agent_name": agent_name,
                 "status": "failed", "reason": str(e),
             })
@@ -108,13 +108,13 @@ class Coordinator:
 def build_default_coordinator() -> Coordinator:
     """The five local agents this pipeline runs today: reclassify posts against
     the current Pioneer-promoted policy, classify them into interest plans,
-    ground and recall each interest against Senso and VectorAI DB, and evolve
-    the category taxonomy itself from whatever didn't fit anywhere ("other").
-    Registering them here — instead of loop.py calling
-    reclassify/planner/senso/vectorai/taxonomy_evolver directly — is what let
+    ground and recall each interest against VectorAI DB's own local memory,
+    and evolve the category taxonomy itself from whatever didn't fit anywhere
+    ("other"). Registering them here — instead of loop.py calling
+    reclassify/planner/vectorai/taxonomy_evolver directly — is what let
     this fifth agent get added without loop.py's dispatch shape changing."""
     from agent import planner, policy, reclassify, taxonomy_evolver
-    from agent.adapters import senso, vectorai
+    from agent.adapters import vectorai
 
     coordinator = Coordinator()
 
@@ -155,15 +155,19 @@ def build_default_coordinator() -> Coordinator:
     ))
 
     def _ground(input: list[Message]) -> list[Message]:
-        interest = input[0].parts[0].content
-        grounding = senso.ground(interest)
-        return [Message(role="agent/senso-grounder", parts=[
-            MessagePart(content=grounding, content_type="application/json"),
+        task = input[0].parts[0].content
+        # Batched, not per-interest — same reasoning as _recall() below: one
+        # embed subprocess call for the whole set of new plans, not one per plan.
+        grounding_by_interest = vectorai.ground_locally_many(
+            task["query_texts"], exclude_hrefs_by_text=task["exclude_hrefs_by_text"],
+        )
+        return [Message(role="agent/vectorai-grounder", parts=[
+            MessagePart(content=grounding_by_interest, content_type="application/json"),
         ])]
 
     coordinator.register(AgentManifest(
-        name="senso-grounder",
-        description="Pulls Senso KB context chunks relevant to an interest.",
+        name="vectorai-grounder",
+        description="Grounds an interest in other posts the user actually saved, via VectorAI DB's own local semantic search — not a post's own content citing itself.",
         handler=_ground,
     ))
 
@@ -194,8 +198,8 @@ def build_default_coordinator() -> Coordinator:
     coordinator.register(AgentManifest(
         name="taxonomy-evolver",
         description="Detects a genuine recurring cluster among posts that didn't fit any "
-                    "existing category, checks it isn't already covered, grounds it via Senso, "
-                    "and auto-promotes a new versioned category if warranted.",
+                    "existing category, checks it isn't already covered, grounds it against "
+                    "VectorAI DB's own local memory, and auto-promotes a new versioned category if warranted.",
         handler=_taxonomy_evolve,
     ))
 

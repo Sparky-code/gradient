@@ -1,0 +1,6 @@
+# Test-only dependencies for tests/ (Flask test client + Playwright E2E).
+# Install with: ./venv/bin/pip install -r requirements-test.txt
+# then once: ./venv/bin/playwright install chromium
+pytest==9.1.1
+pytest-playwright==0.8.0
+requests==2.34.2

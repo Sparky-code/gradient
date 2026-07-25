@@ -1,10 +1,11 @@
-# RUNBOOK — Self-Evolving InstaGone Agent
+# RUNBOOK — Gradient
 
-See also: **[DEMO.md](DEMO.md)** (how to actually run a pass, day-of),
-**[GAPS_AND_FILL.md](GAPS_AND_FILL.md)** (fresh-machine setup checklist + one fill action per
-gap below), **[BENCHMARKS.md](BENCHMARKS.md)** (what to measure and expected ranges, once a
-test harness exists). This doc is the architecture + honest real-vs-stub reference the other
-three point back to.
+See also: **[DEMO.md](docs/DEMO.md)** (how to actually run a pass, day-of),
+**[GAPS_AND_FILL.md](docs/GAPS_AND_FILL.md)** (fresh-machine setup checklist + one fill action per
+gap below), **[BENCHMARKS.md](docs/BENCHMARKS.md)** (what to measure and expected ranges, once a
+test harness exists), and **[ROADMAP.md](ROADMAP.md)** (forward-looking: what to build next, not
+what's left to fix). This doc is the architecture + honest real-vs-stub reference the others
+point back to.
 
 ## What this is
 
@@ -27,18 +28,21 @@ already-classified post data — each post carrying a `category`/`subcategory`/`
 pipeline (how it gets from a raw export to that classified shape) is out of scope here; what
 matters to this repo is only the shape of data it expects to receive.
 
-It's a thin orchestration layer (`agent/loop.py`) that takes that classified data and layers
-the sponsor tools named in the hackathon brief on top: Senso, Guild, Pioneer, VectorAI DB, and
-Replay.io, plus a separate x402/CDP payment-rail requirement from the brief text itself. **Three
-sponsor integrations are real and live (Senso, VectorAI DB, and now Pioneer). Guild is a local
-stub. Pioneer's own hosted API is genuinely called every retrain pass now — confirmed live
-(auth works, read-only endpoints return real 200s) — but every compute-consuming call hits a
-hard account-level billing wall (`card_required`, no bypass found) on this project's key, so no
-real training job actually completes; the retraining outcome that changes behavior still comes
-from a local reimplementation (a real local LLM applying a versioned few-shot policy), which
-keeps running regardless of what Pioneer's API does. Replay.io has a live API key sitting in
-`API.md` but is never called from anywhere; the x402/CDP payment gate is cosmetic text, not a
-real paywall** — see the diagram and deep dive below for exactly which.
+It's a thin orchestration layer (`agent/loop.py`) that takes that classified data and layers a
+small number of *genuinely real* integrations on top, rather than a stub for every tool named in
+the hackathon brief. That's a deliberate local-first stance, not an oversight: **Senso, VectorAI
+DB, and Pioneer are real, live integrations. Governance/audit-logging (what "Guild" would have
+covered) and session recording (what "Replay.io" would have covered) are handled locally —
+`agent/session_log.py` is a genuine first-party local audit trail, not a stub standing in for a
+hosted API, and Replay.io was dropped outright (a live key sat unused in `API.md` with zero
+adapter code — never pursued, not worth pretending otherwise).** Pioneer's own hosted API is
+genuinely called every retrain pass now — confirmed live (auth works, read-only endpoints return
+real 200s) — but every compute-consuming call hits a hard account-level billing wall
+(`card_required`, no bypass found) on this project's key, so no real training job actually
+completes; the retraining outcome that changes behavior still comes from a local reimplementation
+(a real local LLM applying a versioned few-shot policy), which keeps running regardless of what
+Pioneer's API does. Monetization (x402/CDP) was dropped outright as out of scope (§7) — see the
+diagram and deep dive below for exactly which.
 
 Run it with:
 ```
@@ -67,12 +71,11 @@ flowchart TD
 
     A --> B["ingest.py: load_posts()"]
     B -->|"raw export<br/>(no 'actionable' field)"| B1
-    B1["🟡 external enrichment step (raw exports only)<br/>hands off to a separately-maintained tool<br/>(InstaGone) not described in this doc — only the<br/>classified shape it returns matters here.<br/>Hard-coded local path, single machine only"]
+    B1["⚠️ rejected — RuntimeError.<br/>Gradient only accepts already-enriched input;<br/>raw-export enrichment is an external, decoupled<br/>step run before the drop, with whatever tool<br/>the user chooses — not this repo's concern"]
     B -->|"already enriched"| SI
-    B1 --> SI
 
     SI["senso.ingest_post() + vectorai.remember_posts()<br/>+ vectorai.update_status() (called from feedback, below)<br/>direct KB/memory writes, href-deduped —<br/>NOT orchestrator-routed, see deep dive §"]
-    SI --> GUILD
+    SI --> SESSIONLOG
 
     SI --> POL
 
@@ -89,7 +92,7 @@ flowchart TD
         CLS --> REC
     end
 
-    ORCH -.->|"every create_run() dispatch logs here too"| GUILD
+    ORCH -.->|"every create_run() dispatch logs here too"| SESSIONLOG
     TAX -->|"on promotion"| K2["data/state/taxonomy/current.json<br/>+ vN.json"]
     GND --> D[("store.py<br/>data/state/plans.json<br/>merge by plan_id")]
     REC --> D
@@ -97,12 +100,8 @@ flowchart TD
     D --> F["publisher.py: render()"]
     F --> G["📄 cited.md<br/>the one real published artifact"]
 
-    F -.-> PAY
-    PAY["⚠️ payments.py — x402 / CDP paywall<br/>STATIC BANNER TEXT ONLY<br/>is_unlocked() hard-returns True —<br/>nothing is actually gated or monetized"]
-    PAY -.-> G
-
-    F --> GUILD
-    GUILD["⚠️ guild.py — Guild governance adapter<br/>STUB: appends to a local JSONL file<br/>no API key, no real session/audit API"]
+    F --> SESSIONLOG
+    SESSIONLOG["✅ session_log.py — local audit trail<br/>REAL: plain first-party JSONL append,<br/>not a stub standing in for a sponsor API"]
 
     G --> H["User: python main.py feedback<br/>&lt;plan_id&gt; &lt;accept/reject/share/invite&gt;<br/>— or the web dashboard's per-item Accept/Reject<br/>+ explicit Submit once a plan is fully decided"]
     H --> I["feedback.py: record() / record_item()+submit_plan()<br/>flips status, writes real outcome to VectorAI DB"]
@@ -116,10 +115,8 @@ flowchart TD
 
     classDef real fill:#1b4332,stroke:#40916c,color:#eafff1
     classDef fragile fill:#1a3a5c,stroke:#4a90d9,color:#eaf4ff
-    classDef stub fill:#4a3b0a,stroke:#d4a017,color:#fff6e0
-    class POL,TAX,GND,REC,J,REEV real
+    class POL,TAX,GND,REC,J,REEV,SESSIONLOG real
     class B1 fragile
-    class PAY,GUILD stub
 ```
 
 ---
@@ -155,18 +152,20 @@ posts** — a list of objects each shaped roughly like `{"href": ..., "category"
 input contract this document describes: given data in that shape, here is what this repo does
 with it.
 
-A dropped file can also arrive as a **raw export** — hrefs only, none of the fields above. In
-that case `load_posts()` hands it off to an external enrichment step (InstaGone) via
-`subprocess.run` and reads back the exact same classified shape described above. That external
-step's own internals aren't described here — from this repo's side, it's an opaque call in,
-classified-JSON out.
+A dropped file can also arrive as a **raw export** — hrefs only, none of the fields above.
+`load_posts()` no longer does anything with that case except raise a clear `RuntimeError`
+explaining the shape it expected. This used to shell out to a sibling project (InstaGone) via
+a hard-coded absolute path in `agent/config.py` to enrich raw exports in place — that coupling
+was removed deliberately: Gradient's own scope is the plan/ground/evolve/feedback loop over
+already-classified data, not owning a specific external enrichment tool's location on one
+machine. Turning a raw export into the classified shape above is still a real step someone
+needs to run — just outside this repo, with whatever tool they choose — and its output dropped
+into `data/drop/` like any other input.
 
-**Weak point:** the path to that external step is a hard-coded absolute path in
-`agent/config.py:22-24`, pointing at a specific sibling directory on this one machine. If it
-moves, isn't checked out, or its own environment isn't built, `load_posts()` raises
-`RuntimeError` and `run_once()` aborts mid-pass for *every* remaining new file in that batch
-too — there's no per-file isolation in `run_once()`'s loop, so one bad drop file can block all
-others queued behind it.
+A bad/malformed drop file (raw export or otherwise) no longer blocks the rest of a batch either
+— `run_once()` isolates each file's processing (`agent/loop.py`'s `_process_drop_file()`), logs
+the failure, and continues to the next file; the failed file just isn't marked processed, so
+it's retried next pass.
 
 `data/state/` is gitignored and gets recreated fresh on first run — it's local runtime state,
 not part of the repo. A verification run (`./venv/bin/python main.py once`) against the
@@ -210,7 +209,7 @@ A2A under the Linux Foundation; irrelevant here since nothing in this module tal
 network, but relevant if this pattern is ever pointed at a real remote agent.)
 
 A `Coordinator` registers five named agents and dispatches `create_run(agent_name, input)` to
-them; a handler that raises fails only its own run (logged via Guild) instead of the whole
+them; a handler that raises fails only its own run (logged to the session log) instead of the whole
 pass. `loop.py` calls all five instead of calling
 `planner`/`policy`/`reclassify`/`senso`/`vectorai`/`taxonomy_evolver` directly:
 
@@ -231,8 +230,8 @@ add ceremony without payoff. This is a boundary decision, not an oversight.
 Verified end-to-end (see §2): one real run produced 1 `policy-reclassifier` dispatch, 1
 `classifier` dispatch, 1 batched `vectorai-recaller` dispatch, and 5 `senso-grounder`
 dispatches (one per plan) — all `"completed"`, zero failures, all logged to
-`guild_session_log.jsonl` as `orchestrator_run` events. `taxonomy-evolver` dispatches every
-pass too (one `taxonomy_evolve` Guild event each time) and has been directly observed promoting
+`session_log.jsonl` as `orchestrator_run` events. `taxonomy-evolver` dispatches every
+pass too (one `taxonomy_evolve` session-log event each time) and has been directly observed promoting
 a real category (`"home coffee roasting"`, from a genuine 3-post cluster with real Senso
 citations and a cleared reuse-check) — treat that as "the mechanism works," not a claim about
 what `data/state/taxonomy/current.json` contains *right now*, since this repo's `data/state/`
@@ -297,23 +296,25 @@ regenerated on every `run_once()` pass and every `feedback()` call, so it's alwa
 with plan state — but it's a full-file rewrite each time (`config.CITED_MD.write_text`), not
 an append or diff, so anything a person hand-edited into `cited.md` between runs is lost.
 
-### 7. Monetization (`agent/adapters/payments.py`) — cosmetic only
+### 7. Monetization — dropped, out of scope
 
-Per `payments-research.md`'s recommendation, the intended design is an x402 paywall (HTTP 402
-+ CDP-provisioned Base Sepolia testnet wallet) gating full plan details. **None of that is
-implemented.** `PAYWALL_NOTICE` is a static markdown string rendered into every `cited.md`,
-and `is_unlocked()` unconditionally returns `True`. The brief's "monetize it with agent
-payment rails" requirement is, right now, pure text in the output file — nothing is actually
-metered, priced, or collected.
+`agent/adapters/payments.py` used to render a static x402/CDP paywall banner into every
+`cited.md` (`PAYWALL_NOTICE`) with `is_unlocked()` unconditionally returning `True` — cosmetic
+text describing a paywall that gated nothing, metered nothing, and collected nothing. That's
+gone now: monetization was decided to be out of scope for what this agent is actually for
+(processing and evolving on saved-post feedback), not a feature worth simulating with fake UI
+just because the brief mentioned payment rails. `payments-research.md`'s x402/CDP design notes
+are left as-is for historical record, not as a live plan.
 
-### 8. Governance (`agent/adapters/guild.py`) — local stub
+### 8. Local session log (`agent/session_log.py`)
 
-Every stage logs an event via `guild.log_session()`, but there's no Guild API key configured,
-so this is just appending JSON lines to `data/state/guild_session_log.jsonl`. The adapter's
-own docstring frames this correctly: a same-shaped local mirror so swapping in the real
-session/workspace API later is "a one-function change" — but today there is no external
-audit trail, credential policy, or workspace isolation, just a flat file with no rotation or
-access control.
+Every stage logs an event via `session_log.log_session()`, appending JSON lines to
+`data/state/session_log.jsonl`. This used to be an "adapter" for a sponsor tool (Guild) with no
+API key ever configured — a stub pretending to be a pluggable external service. That framing was
+dropped: this repo's stance is local-first, and an audit trail that's genuinely local by design
+isn't a gap waiting for a hosted API, it's the intended architecture. What's still true either
+way: it's a flat file with no rotation, no access control, and no schema enforcement — real
+limitations of a plain JSONL append, not specific to the rename.
 
 ### 9. Feedback → real retraining (`agent/feedback.py`, `agent/policy.py`, `agent/reclassify.py`, `agent/adapters/pioneer.py`)
 
@@ -321,7 +322,7 @@ access control.
 drop. It flips the plan's status, queues a per-item labeled example for Pioneer
 (`submit_feedback` — one example per post, not a plan-level rollup, since policy synthesis
 needs real subcategory/action content), writes the real outcome back to VectorAI DB
-(`vectorai.update_status()`), logs to Guild, and re-renders `cited.md`.
+(`vectorai.update_status()`), logs to the local session log, and re-renders `cited.md`.
 
 This is where the "self-evolve" claim actually gets tested, and — contrary to what an earlier
 version of this document said — **it is not simulated math anymore**. `pioneer.maybe_retrain()`
@@ -379,8 +380,8 @@ now produces a real artifact:
   fabricates a job id or status past what Pioneer's API actually returned — the local
   reimplementation's promotion (above) is what actually changes classification behavior, runs
   regardless of whether the real API call succeeds, and isn't gated on billing being resolved.
-  That's a genuinely different situation from Replay.io (§10): Replay.io's credential is never
-  even loaded; Pioneer's is loaded and used every pass, just blocked externally.
+  That's a genuinely different situation from Replay.io (§10, dropped outright, never even
+  integrated): Pioneer's credential is loaded and used every pass, just blocked externally.
 - The training-queue file is deleted after each retrain pass
   (`config.TRAINING_QUEUE_FILE.unlink()`) — if `run_once()` crashes between writing the report
   and the next scheduled pass, that's fine (report and promoted policy are already persisted),
@@ -464,20 +465,23 @@ path — `main.py feedback <plan_id> accept|reject`) synchronously calls
   no CLI equivalent (a `main.py once` run can't be interrupted this way, only `Ctrl-C`, which is
   the ungraceful kind — see §12).
 
-### 10. Missing credentials
+### 10. Sponsor tools intentionally not integrated
 
 `hackathon-research.md` designs a layered stack (Senso / VectorAI DB / Guild / Pioneer). Senso,
-VectorAI DB, and Pioneer are all real now (§5, §9); Guild is a local stub (§8).
+VectorAI DB, and Pioneer are real, live integrations (§5, §9). The rest were deliberate
+local-first decisions, not gaps waiting to be filled:
 
-Only one sponsor credential still sits in `API.md` doing nothing:
+- **Guild** — governance/audit-logging is handled by `agent/session_log.py` (§8), a genuine
+  first-party local audit trail. There's no external Guild API call anywhere, and there's no
+  plan to add one — a local-first agent shouldn't route its own audit trail through a hosted
+  SaaS it doesn't otherwise depend on.
 - **Replay.io** — one of the six sponsors actually listed on the hackathon event page (per
-  `payments-research.md`'s sponsor check). No `agent/adapters/replay.py`, no import of it, no
-  reference to it anywhere else in the codebase. Credentialed and entirely unused, with no
-  functional substitute either — unlike Pioneer, whose credential is now loaded and called
-  every retrain pass (§9), just blocked by a billing wall on the write path.
-
-Band, the coordination-layer sponsor, was deliberately not integrated as an external SaaS —
-see §4 for the local `orchestrator.py` built in its place.
+  `payments-research.md`'s sponsor check). Had a live credential sitting unused in `API.md`,
+  no `agent/adapters/replay.py`, no import of it anywhere. Dropped outright rather than kept
+  as a "someday" gap — the credential has been removed from `API.md`, and nothing in this
+  codebase references Replay.io anymore.
+- **Band** — the coordination-layer sponsor — was deliberately not integrated as an external
+  SaaS at all; see §4 for the local `orchestrator.py` built in its place.
 
 ### 11. State files reference
 
@@ -490,35 +494,34 @@ see §4 for the local `orchestrator.py` built in its place.
 | `data/state/training_queue.jsonl` | `pioneer.py` | Pending feedback examples; flushed + deleted every 5 |
 | `data/state/policy/current.json` + `v*.json` | `policy.py` | The real, versioned few-shot exemplar policy Pioneer promotes — `current.json` is a copy of the latest `vN.json` |
 | `data/state/retrain_reports/*.json` | `pioneer.py` | One file per retrain/promote decision (real policy artifact, see §9) |
-| `data/state/guild_session_log.jsonl` | `guild.py` | Append-only local audit log of every event, including every `orchestrator_run` dispatch (§4) |
+| `data/state/session_log.jsonl` | `session_log.py` | Append-only local audit log of every event, including every `orchestrator_run` dispatch (§4) |
 | `cited.md` | `publisher.py` | The published, user-facing output — full rewrite each pass |
-| `API.md` | manual | Plaintext API keys for Senso/Pioneer/Replay.io — **gitignored**, but lives unencrypted on disk with no rotation. Senso's and Pioneer's keys are both actually loaded and called now; only Replay.io's sits unused (§10) |
+| `API.md` | manual | Plaintext API keys for Senso/Pioneer — **gitignored**, but lives unencrypted on disk with no rotation. Both are actually loaded and called (Replay.io's credential was removed, §10 — never integrated) |
 
 ### 12. Other gaps worth flagging
 
 - **No automated tests** anywhere in the repo.
-- **Dependency manifest is partial.** `requirements.txt` now exists but only lists
-  `actian-vectorai-client` (for the root `venv/` that also runs `main.py` itself). The much
-  heavier ML dependencies — `mlx` + `mlx-lm` (policy reclassification) and `torch` +
-  `transformers` (VectorAI embeddings) — live in that same `venv/` with no manifest of their own
-  and no version pins anywhere in the repo.
+- **Dependency manifest is now complete.** `requirements.txt` pins all five direct
+  dependencies (`actian-vectorai-client`, `Flask`, `mlx-lm`, `torch`, `transformers`) against
+  versions verified working in this repo's own `venv/` — `mlx`/`mlx-lm`/`torch`/`transformers`
+  used to be added by hand post-install with no pins; that's fixed.
 - **Two local model dependencies, one shared `venv/`.** Both reclassification
   (`mlx-community/Qwen3-30B-A3B-4bit`) and embedding (`nomic-embed-text-v1.5`) subprocess into the
   same `venv/`, are Apple-Silicon/`mlx`-flavored and cache-dependent, and add real latency (the
   reclassify subprocess has a 300s timeout; embedding has 120s) — heavier and slower than
-  anything else in this pipeline, single-machine by construction.
+  anything else in this pipeline, single-machine by construction. `scripts/warm_cache.py` fetches
+  both caches up front so the first real pass isn't also the first download.
 - **VectorAI DB depends on a Docker container being up** (`docker-compose.yml`,
   `self-evolve-agent-vectorai`) — another single-machine runtime dependency; every adapter call
   degrades to a stub if it's down, but nothing auto-starts it.
-- **An apparently-abandoned `.venv/`** exists at the repo root alongside the real `venv/`, with
-  only `actian-vectorai-client` installed and no code anywhere referencing it — likely a leftover
-  from an earlier setup attempt. Harmless, but worth removing rather than leaving two
-  same-purpose virtualenvs around.
 - **`run_loop()`** has no shutdown handling (`Ctrl-C` just raises `KeyboardInterrupt`
   mid-pass — a plan write or Senso call could be interrupted partway) and no protection
   against two `loop` processes running against the same `data/state/` concurrently.
-- **Cross-process concurrency remains open.** §9 documents a real same-process race that was
-  found and fixed (`store.PLANS_LOCK`, a `threading.Lock`) — but that only serializes access
-  within one Python process. Running `main.py once` from a terminal while `webui.py` also has a
-  submission in flight is still unprotected; this is the broader version of the "no lock against
-  two `main.py once`/`loop` processes" bullet above.
+- **Cross-process concurrency is now handled.** §9 documents a real same-process race that was
+  found and fixed (`store.PLANS_LOCK`). That lock is no longer just a `threading.Lock` — it also
+  holds an `fcntl.flock()` on `data/state/.plans.lock`, so a second *process* (`main.py once` from
+  a terminal while `webui.py` also has a submission in flight, or two `loop` invocations) now
+  blocks on the same critical sections instead of racing them. Verified with 3 separate OS
+  processes contending for the lock via `multiprocessing.Process` (not threads) — they serialized
+  as expected rather than interleaving. `run_loop()`'s lack of `Ctrl-C` shutdown handling (above)
+  is a separate, still-open concern.

@@ -6,8 +6,9 @@ cluster; the same cluster does NOT match any existing category — see
 taxonomy_evolver.py), proposes a short category name + one-line description.
 
 Deliberately NOT given the freedom to invent wild names: it only sees the
-cluster's real subcategory/action text plus real Senso-grounded citations, and
-is instructed to output a name in the same lowercase "x and y" style as the
+cluster's real subcategory/action text plus real grounding citations (other
+posts the user saved, via VectorAI DB's own local search), and is instructed
+to output a name in the same lowercase "x and y" style as the
 existing taxonomy so a promoted category reads like it belongs, not like a
 one-off label.
 """

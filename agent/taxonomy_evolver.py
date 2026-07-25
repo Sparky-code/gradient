@@ -1,24 +1,21 @@
 """Self-evolving category taxonomy — the piece the audit flagged as missing:
 suppression (policy.py/reclassify.py) is the only thing that evolved before this,
 and the anchor category list itself was completely frozen. This closes that gap
-using the two tools already proven real in this project, in new roles:
+using VectorAI DB, in two roles:
 
-  VectorAI DB — a genuine multi-collection use (taxonomy_candidates,
+  Clustering — a genuine multi-collection use (taxonomy_candidates,
   taxonomy_anchors), not a second copy of agent_memory: detects whether "other"
   posts recur into a real cluster, and checks that cluster against existing
   categories before minting anything new (the reuse-weighting explicitly asked
   for — a category only gets promoted if it's NOT already covered).
 
-  Senso — a new role for it too: grounding a *candidate taxonomy expansion*
-  (does real external content support this being a coherent topic?) rather than
-  citing sources for an already-decided plan. Senso's own content-generation
-  endpoint (POST /org/content-generation/sample) was evaluated and rejected for
-  the actual naming step — it requires pre-configured content-types/GEO
-  questions built for SEO/marketing copy, a 30-90s async job, and no free-form
-  prompt path; forcing a category-naming task through that shape would repeat
-  the exact mistake reclassify.py already made once (an API used outside what
-  it's built for). Naming stays with the local model that's already reliable
-  for this kind of judgment call.
+  Grounding — checking a *candidate taxonomy expansion* against other posts
+  the user actually saved (does content beyond this exact cluster support it
+  being a coherent, recurring topic?) rather than citing sources for an
+  already-decided plan. This used to be Senso's job (a hosted KB search); it's
+  local now (`vectorai.ground_locally()`) — see ROADMAP.md for why that
+  decoupling happened. Naming stays with the local model, same as before —
+  that was never Senso's or VectorAI DB's job.
 
 Auto-promotes with no human approval, same contract as policy.py/pioneer.py.
 """
@@ -28,8 +25,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from agent import cancellation, config, taxonomy
-from agent.adapters import guild, senso, vectorai
+from agent import cancellation, config, session_log, taxonomy
+from agent.adapters import vectorai
 
 CLUSTER_MIN_SIZE = 3  # itself + at least 2 real neighbors — mirrors Pioneer's
                        # RETRAIN_BATCH_SIZE=5 in spirit: don't act on a single post
@@ -78,7 +75,7 @@ def evolve(posts: list[dict]) -> dict:
     (not just the "other" ones) — needed so existing categories can be embedded
     from real representative content, not just their bare names. Returns a
     summary dict for logging — never raises; every real-tool call already
-    degrades to a safe no-op on its own (VectorAI DB/Senso/local model), so a
+    degrades to a safe no-op on its own (VectorAI DB/local model), so a
     full pass here only ever adds zero or one new category, never crashes the
     loop it's called from."""
     current = taxonomy.load_current()
@@ -109,7 +106,7 @@ def evolve(posts: list[dict]) -> dict:
 
         reuse_match = vectorai.nearest_anchor(representative_text)
         if reuse_match:
-            guild.log_session({
+            session_log.log_session({
                 "event": "taxonomy_reuse_skip", "cluster_size": len(cluster_posts),
                 "representative_href": post.get("href"), "matched_existing": reuse_match["name"],
                 "score": reuse_match["score"],
@@ -119,9 +116,15 @@ def evolve(posts: list[dict]) -> dict:
                 "promoted": None, "reuse_matched": reuse_match["name"],
             }
 
-        grounding = senso.ground(representative_text)
+        # Exclude the cluster's own member posts — grounding has to find
+        # OTHER saved content supporting this being a real topic, not just
+        # echo the exact posts already being evaluated back at themselves.
+        grounding = vectorai.ground_locally(
+            representative_text,
+            exclude_hrefs={p.get("href") for p in cluster_posts if p.get("href")},
+        )
         if not grounding["grounded"]:
-            guild.log_session({
+            session_log.log_session({
                 "event": "taxonomy_cluster_ungrounded", "cluster_size": len(cluster_posts),
                 "representative_href": post.get("href"),
             })
@@ -129,7 +132,7 @@ def evolve(posts: list[dict]) -> dict:
 
         proposal = _propose_name(cluster_posts, grounding["citations"], current["categories"])
         if not proposal.get("category"):
-            guild.log_session({
+            session_log.log_session({
                 "event": "taxonomy_naming_failed", "cluster_size": len(cluster_posts),
                 "representative_href": post.get("href"),
             })
@@ -139,10 +142,10 @@ def evolve(posts: list[dict]) -> dict:
             "cluster_size": len(cluster_posts),
             "cluster_hrefs": [p.get("href") for p in cluster_posts if p.get("href")],
             "description": proposal.get("description"),
-            "senso_citations": grounding["citations"],
+            "grounding_citations": grounding["citations"],
             "reuse_check_cleared": True,
         })
-        guild.log_session({
+        session_log.log_session({
             "event": "taxonomy_promoted", "category": proposal["category"],
             "version": promoted["version"], "cluster_size": len(cluster_posts),
         })

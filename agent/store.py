@@ -15,8 +15,17 @@ like. Every caller that does load-mutate-save against plans.json must hold
 this lock for that whole sequence — see reevaluator.py for the pattern that
 keeps the *slow* work (tagging, embedding, grounding) outside the lock and
 only the fast final read-modify-write inside it.
+
+PLANS_LOCK also holds a real cross-process file lock (fcntl.flock), not just
+an in-process threading.Lock — a second *process* (e.g. `main.py once` run
+from a terminal while webui.py is also live, or two `loop` invocations)
+doing its own load-mutate-save against plans.json is exactly the same race,
+just across the process boundary where threading.Lock can't reach. A second
+process now blocks on the flock until the first releases it, rather than
+interleaving reads/writes.
 """
 
+import fcntl
 import json
 import shutil
 import threading
@@ -25,7 +34,34 @@ from pathlib import Path
 
 from agent import config
 
-PLANS_LOCK = threading.Lock()
+
+class _ProcessLock:
+    """A threading.Lock() plus an fcntl.flock() on a dedicated lock file, so
+    `with PLANS_LOCK:` serializes both other threads in this process and any
+    other process touching the same data/state/ directory. The thread lock is
+    acquired first (cheap, and guarantees only one thread in this process ever
+    holds the fd/flock at a time) and released last."""
+
+    def __init__(self, path: Path):
+        self._path = path
+        self._thread_lock = threading.Lock()
+        self._fd = None
+
+    def __enter__(self) -> "_ProcessLock":
+        self._thread_lock.acquire()
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._fd = open(self._path, "w")
+        fcntl.flock(self._fd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        fcntl.flock(self._fd, fcntl.LOCK_UN)
+        self._fd.close()
+        self._fd = None
+        self._thread_lock.release()
+
+
+PLANS_LOCK = _ProcessLock(config.STATE_DIR / ".plans.lock")
 
 SNAPSHOT_DIR = config.STATE_DIR / "snapshots"
 MAX_SNAPSHOTS = 10

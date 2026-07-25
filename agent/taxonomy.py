@@ -63,7 +63,7 @@ def ensure_seeded(observed_categories: list[str]) -> dict:
 def promote(new_category: str, evidence: dict) -> dict:
     """Add one new category and auto-promote — no human approval, matching
     policy.py's contract. `evidence` is the taxonomy_evolver's record of why
-    (cluster size, nearest-anchor score that was checked and cleared, Senso
+    (cluster size, nearest-anchor score that was checked and cleared, local
     grounding citations, which local-model call proposed the name) — kept in
     full in the versioned history, not just a bare category string, so a later
     reviewer can see the actual justification, not just the outcome."""

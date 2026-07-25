@@ -7,7 +7,7 @@ from agent import feedback, loop
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Self-evolving InstaGone agent")
+    parser = argparse.ArgumentParser(description="Gradient — self-evolving agent")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("once", help="run one ingest -> plan -> publish -> retrain-check pass")

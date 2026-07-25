@@ -1,8 +1,11 @@
-# Gradient: Self-evolving-agent Hackathon 07/24/26
+# Gradient
 
-Turns classified Instagram-post data into interest plans, publishes `cited.md`, and evolves
-itself on real accept/reject feedback. Full architecture, honest real-vs-stub breakdown of
-every component: **[RUNBOOK.md](RUNBOOK.md)**.
+Turns already-classified Instagram-post data into interest plans, publishes `cited.md`, and
+evolves itself on real accept/reject feedback. Gradient's own scope starts after a raw export
+has been enriched (see `agent/ingest.py`) — planning, grounding, taxonomy evolution, and the
+feedback loop, not downloading/transcribing/classifying raw Instagram media itself. Full
+architecture, honest real-vs-stub breakdown of every component: **[RUNBOOK.md](RUNBOOK.md)**.
+Where this goes next: **[ROADMAP.md](ROADMAP.md)**.
 
 ## Stack
 
@@ -21,15 +24,20 @@ Both subprocess into `venv/` in isolation, batched per pass, cooperatively cance
 
 ## Sponsor tools
 
+Local-first: a small number of genuinely real integrations, not a stub for every tool named in
+the brief.
+
 | Tool | Status |
 |---|---|
 | **Senso** (`apiv2.senso.ai`) | ✅ real — KB ingest + grounding |
 | **VectorAI DB** (Actian, self-hosted) | ✅ real — episodic memory, taxonomy clustering |
 | **Pioneer** (`api.pioneer.ai`) | ✅ real API call every retrain pass, blocked by account billing — the actual retraining outcome comes from a local reimplementation instead |
-| **Guild** | local JSONL stub, no key |
-| **Band** | not used — replaced with a local ACP-shaped orchestrator |
-| **Replay.io** | credentialed, unused |
-| **x402/CDP payments** | cosmetic banner only |
+
+Not integrated, on purpose: **Guild** (governance/audit-logging is `agent/session_log.py`, a
+genuine first-party local log — not a stub waiting for a hosted API), **Band** (replaced with a
+local ACP-shaped orchestrator), **Replay.io** (dropped outright — a live credential sat unused
+with zero adapter code; removed rather than kept as a someday-gap), **x402/CDP payments**
+(monetization dropped outright as out of scope — no paywall, real or cosmetic).
 
 ## Repo-internal pieces
 

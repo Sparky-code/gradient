@@ -7,7 +7,7 @@ pass, give feedback) plus a read-only view of the published output, all from
 a browser instead of the CLI (see DEMO.md for the CLI-only version).
 
 Routes:
-  GET  /              dashboard — plans, statuses, guild log tail, policy version.
+  GET  /              dashboard — plans, statuses, session log tail, policy version.
                       Auto-refreshes every 5s while a run or plan-submit is in
                       progress (plain meta-refresh, not a separate status
                       endpoint/JS poll).
@@ -70,12 +70,12 @@ def _submit_in_background(plan_id: str) -> None:
         _submit_lock.release()
 
 
-def _guild_tail(n: int = 15) -> list[dict]:
+def _session_log_tail(n: int = 15) -> list[dict]:
     """Each entry gets an `extra` field (everything but logged_at/event) precomputed
     here — Jinja2 can't evaluate a Python dict comprehension inside {{ }}."""
-    if not config.GUILD_LOG_FILE.exists():
+    if not config.SESSION_LOG_FILE.exists():
         return []
-    lines = [l for l in config.GUILD_LOG_FILE.read_text().splitlines() if l.strip()]
+    lines = [l for l in config.SESSION_LOG_FILE.read_text().splitlines() if l.strip()]
     entries = [json.loads(l) for l in lines[-n:]][::-1]
     for e in entries:
         e["extra"] = {k: v for k, v in e.items() if k not in ("logged_at", "event", "extra")}
@@ -87,7 +87,7 @@ PAGE = """
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Self-Evolving Agent — Dashboard</title>
+<title>Gradient — Dashboard</title>
 {% if run_state.running or submit_state.running %}<meta http-equiv="refresh" content="5">{% endif %}
 <style>
   :root {
@@ -371,7 +371,7 @@ PAGE = """
 
 <header class="topbar">
   <div>
-    <h1>Self-Evolving Agent</h1>
+    <h1>Gradient</h1>
     <p class="subtitle">Local dashboard — plans, policy, activity</p>
   </div>
   <div class="topbar-actions">
@@ -493,7 +493,7 @@ PAGE = """
     <div class="meta">
       <code>{{ plan.plan_id }}</code>
       · {{ plan['items']|length }} item(s)
-      {% if plan.grounding and plan.grounding.grounded %}· Senso-grounded{% endif %}
+      {% if plan.grounding and plan.grounding.grounded %}· grounded{% endif %}
       {% if plan.memory and plan.memory.recalled %}· {{ plan.memory.memories|length }} VectorAI DB recall(s){% endif %}
     </div>
     <details class="items-toggle" {{ 'open' if plan['items']|length <= 3 else '' }}>
@@ -534,7 +534,7 @@ PAGE = """
 <h2 class="section-title">Recent activity <span class="count">last 15</span></h2>
 <div class="card table-wrap">
 <table class="log">
-{% for e in guild_tail %}
+{% for e in session_log_tail %}
   <tr><td class="meta mono">{{ e.logged_at }}</td><td><span class="event">{{ e.event }}</span></td>
       <td class="mono">{{ e.extra }}</td></tr>
 {% else %}
@@ -702,7 +702,7 @@ def dashboard():
     snapshots = store.list_snapshots()
     return render_template_string(
         PAGE, plans=plans, run_state=_run_state, submit_state=_submit_state,
-        current_policy=policy.load_current(), guild_tail=_guild_tail(),
+        current_policy=policy.load_current(), session_log_tail=_session_log_tail(),
         latest_snapshot=snapshots[0] if snapshots else None,
     )
 

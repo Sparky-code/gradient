@@ -20,8 +20,8 @@ rather than holding a stale snapshot across the whole slow computation — see
 store.py's module docstring for the data-loss bug this design avoids.
 """
 
-from agent import cancellation, planner, publisher, store, taxonomy, taxonomy_evolver, tagger
-from agent.adapters import guild, vectorai
+from agent import cancellation, planner, publisher, session_log, store, taxonomy, taxonomy_evolver, tagger
+from agent.adapters import vectorai
 
 REASSIGN_MIN_SCORE = vectorai.ANCHOR_REUSE_SCORE  # same "is this genuinely the same topic" bar
 
@@ -55,7 +55,7 @@ def _upsert_into(plans: dict[str, dict], dest_id: str, interest: str, generated_
 
 def reevaluate_plan(plan_id: str) -> dict:
     """Never raises — every real-tool call it uses already degrades to a safe
-    no-op on its own failure (Senso/VectorAI DB/local model), so a failed
+    no-op on its own failure (VectorAI DB/local model), so a failed
     reassignment or naming attempt just leaves an item as an unclustered
     orphan rather than crashing the plan resolution that triggered this."""
     store.snapshot(f"before reevaluating {plan_id}")
@@ -78,7 +78,7 @@ def reevaluate_plan(plan_id: str) -> dict:
         # Nothing committed — the plan stays exactly as it was (still
         # ready_to_submit) so the user can just submit again, rather than
         # landing half-tagged with no reassignment attempted.
-        guild.log_session({"event": "plan_reevaluation_cancelled", "plan_id": plan_id, "stage": "tagging"})
+        session_log.log_session({"event": "plan_reevaluation_cancelled", "plan_id": plan_id, "stage": "tagging"})
         return {"plan_id": plan_id, "status": plan_status, "cancelled": True}
 
     result = {
@@ -117,7 +117,7 @@ def reevaluate_plan(plan_id: str) -> dict:
                 orphans.append(item)
 
         if cancellation.is_cancelled():
-            guild.log_session({"event": "plan_reevaluation_cancelled", "plan_id": plan_id, "stage": "reassignment"})
+            session_log.log_session({"event": "plan_reevaluation_cancelled", "plan_id": plan_id, "stage": "reassignment"})
             return {"plan_id": plan_id, "status": plan_status, "cancelled": True}
 
         if orphans:
@@ -153,5 +153,5 @@ def reevaluate_plan(plan_id: str) -> dict:
         store.save_plans(plans)
 
     publisher.render()
-    guild.log_session({"event": "plan_reevaluated", **result})
+    session_log.log_session({"event": "plan_reevaluated", **result})
     return result

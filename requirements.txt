@@ -1,1 +1,9 @@
-actian-vectorai-client
+# Pinned against this repo's own working venv/ (pip freeze), pruned to direct
+# imports only — not the full transitive tree. mlx-lm/torch/transformers are
+# imported lazily inside the _*_worker.py subprocess scripts (see RUNBOOK §4),
+# not at any module's top level, so they don't show up in a plain import grep.
+actian-vectorai-client==1.0.2
+Flask==3.1.3
+mlx-lm==0.31.3
+torch==2.13.0
+transformers==5.14.1

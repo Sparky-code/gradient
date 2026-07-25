@@ -1,6 +1,5 @@
 """Paths and adapter credentials shared across the agent package."""
 
-import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -12,18 +11,14 @@ STATE_DIR = DATA_DIR / "state"
 PLANS_FILE = STATE_DIR / "plans.json"
 PROCESSED_FILE = STATE_DIR / "processed_files.json"
 TRAINING_QUEUE_FILE = STATE_DIR / "training_queue.jsonl"
-SENSO_INGESTED_FILE = STATE_DIR / "senso_ingested.json"
 VECTORAI_REMEMBERED_FILE = STATE_DIR / "vectorai_remembered.json"
 RETRAIN_REPORTS_DIR = STATE_DIR / "retrain_reports"
-GUILD_LOG_FILE = STATE_DIR / "guild_session_log.jsonl"
+SESSION_LOG_FILE = STATE_DIR / "session_log.jsonl"
+CITED_MD_HASH_FILE = STATE_DIR / "cited_md_last_render_hash.json"
 
 CITED_MD = ROOT / "cited.md"
 
 API_KEYS_FILE = ROOT / "API.md"
-
-INSTAGONE_DIR = Path(os.environ.get("INSTAGONE_DIR", "/Users/sparky/Code/projects/InstaGone"))
-INSTAGONE_PYTHON = INSTAGONE_DIR / "venv" / "bin" / "python"
-INSTAGONE_ANALYZE = INSTAGONE_DIR / "analyze.py"
 
 
 def ensure_dirs() -> None:

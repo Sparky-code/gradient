@@ -9,7 +9,7 @@ in flight right now, plus a flag every multi-stage loop (loop.py's per-file
 loop, reevaluator.py) checks before starting its next stage. This is
 deliberately coarse: a cancel request kills the current subprocess almost
 immediately, but a stage that was mid-way through non-subprocess work
-(e.g. a Senso HTTP call) finishes that one call before the next checkpoint
+(e.g. a Pioneer HTTP call) finishes that one call before the next checkpoint
 notices the request.
 """
 

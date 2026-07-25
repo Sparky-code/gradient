@@ -11,8 +11,8 @@ fixes (a stale full-plans snapshot held across a slow reevaluation silently
 reverting other plans' concurrent changes).
 """
 
-from agent import publisher, reevaluator, store
-from agent.adapters import guild, pioneer, vectorai
+from agent import publisher, reevaluator, session_log, store
+from agent.adapters import pioneer, vectorai
 
 DECISION_TO_STATUS = {
     "accept": "accepted",
@@ -51,7 +51,7 @@ def record(plan_id: str, decision: str) -> dict:
             "actionable": item["actionable"],
             "action": item["action"],
         })
-    guild.log_session({"event": "feedback", "plan_id": plan_id, "decision": decision,
+    session_log.log_session({"event": "feedback", "plan_id": plan_id, "decision": decision,
                         "item_count": len(plan["items"])})
 
     # closes the memory loop: recall_similar() on a future pass should see
@@ -59,7 +59,7 @@ def record(plan_id: str, decision: str) -> dict:
     memory_update = vectorai.update_status(
         [item["href"] for item in plan["items"]], DECISION_TO_STATUS[decision],
     )
-    guild.log_session({"event": "vectorai_update_status", "plan_id": plan_id, **memory_update})
+    session_log.log_session({"event": "vectorai_update_status", "plan_id": plan_id, **memory_update})
 
     publisher.render()
 
@@ -114,10 +114,10 @@ def record_item(plan_id: str, href: str, decision: str) -> dict:
         "actionable": item["actionable"],
         "action": item["action"],
     })
-    guild.log_session({"event": "item_feedback", "plan_id": plan_id, "href": href, "decision": decision})
+    session_log.log_session({"event": "item_feedback", "plan_id": plan_id, "href": href, "decision": decision})
 
     memory_update = vectorai.update_status([href], item["status"])
-    guild.log_session({"event": "vectorai_update_status", "plan_id": plan_id, **memory_update})
+    session_log.log_session({"event": "vectorai_update_status", "plan_id": plan_id, **memory_update})
 
     publisher.render()
     return plan

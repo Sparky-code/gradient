@@ -5,19 +5,25 @@ the only sanctioned path is Meta's manual "Download Your Data" export. So the
 loop's input trigger is a watched folder (config.DROP_DIR): a new file dropped
 there is the ingestion event, not a live poll of Instagram itself.
 
-A dropped file is one of two shapes:
-  - already enriched (has an "actionable" key per post) -> InstaGone's
-    analyze.py already ran on it; load directly.
-  - a raw Instagram export (hrefs only) -> shell out to InstaGone's analyze.py
-    in its own venv to run the full download/transcribe/OCR/classify pipeline.
+Gradient's own job starts *after* a raw export has already been turned into
+classified posts — planning, grounding, taxonomy evolution, and the feedback
+loop, not downloading/transcribing/OCR'ing raw Instagram media. So the only
+shape `load_posts()` accepts is already-enriched: a list of objects each
+carrying at least an "actionable" field (plus "href"/"category"/"subcategory"/
+"action"/"key_facts" — see fixtures/demo_export.json for a real example).
+
+This used to also accept a raw export (hrefs only) and shell out to a sibling
+project (InstaGone) via a hard-coded absolute path to enrich it in place. That
+coupling is gone on purpose: Gradient shouldn't hard-depend on one specific
+external enrichment tool living at one specific path on one machine. Turning a
+raw export into the enriched shape above is still a real, separate step
+someone needs to run — just outside this repo, with whatever tool they choose
+(InstaGone is one option) — and its output dropped into config.DROP_DIR like
+any other input.
 """
 
 import json
-import subprocess
-import tempfile
 from pathlib import Path
-
-from agent import config
 
 
 def _is_enriched(posts: list[dict]) -> bool:
@@ -28,20 +34,13 @@ def load_posts(drop_file: Path) -> list[dict]:
     data = json.loads(Path(drop_file).read_text())
     posts = data if isinstance(data, list) else data.get("posts", [])
 
-    if _is_enriched(posts):
-        return posts
-
-    if not config.INSTAGONE_PYTHON.exists():
+    if not _is_enriched(posts):
         raise RuntimeError(
-            f"{drop_file} looks like a raw export (no 'actionable' field) and "
-            f"InstaGone's venv wasn't found at {config.INSTAGONE_PYTHON} to enrich it."
+            f"{drop_file} has no 'actionable' field on its first post — Gradient only "
+            "accepts already-enriched/classified posts (href, category, subcategory, "
+            "actionable, action, key_facts). Raw Instagram exports need to be enriched "
+            "by a separate tool first; Gradient doesn't shell out to one itself. See "
+            "fixtures/demo_export.json for the expected shape."
         )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out_path = Path(tmp) / "enriched.json"
-        subprocess.run(
-            [str(config.INSTAGONE_PYTHON), str(config.INSTAGONE_ANALYZE),
-             str(drop_file), "--output", str(out_path), "--resume"],
-            cwd=config.INSTAGONE_DIR, check=True,
-        )
-        return json.loads(out_path.read_text())
+    return posts

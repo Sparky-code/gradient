@@ -1,0 +1,41 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+          cache: pip
+          cache-dependency-path: |
+            requirements-ci.txt
+            requirements-test.txt
+
+      # requirements.txt (the app's full production deps) is deliberately NOT
+      # installed here — mlx-lm is Apple-Silicon/macOS-only and would fail on
+      # this Linux runner. requirements-ci.txt has the two packages the app's
+      # import chain actually needs at module load time; everything that
+      # would otherwise need torch/mlx-lm/transformers is mocked in tests/
+      # (see requirements-ci.txt's own comment for why that's safe).
+      - name: Install dependencies
+        run: pip install -r requirements-ci.txt -r requirements-test.txt
+
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Run tests
+        run: python -m pytest tests -q

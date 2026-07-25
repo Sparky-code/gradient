@@ -1,0 +1,10 @@
+# App-import dependencies needed to run tests/ in CI — deliberately NOT the
+# full requirements.txt. mlx-lm is Apple-Silicon/macOS-only and would fail to
+# install on Linux runners; it (and torch/transformers) are only ever needed
+# by the local-model subprocess workers (agent/_*_worker.py, reclassify.py,
+# tagger.py), which tests/ mocks out entirely (see tests/conftest.py and
+# tests/e2e/_live_server_app.py) rather than actually invoking. Flask and
+# actian-vectorai-client are the only two packages the app's own import
+# chain (webui.py -> agent.*) needs at module load time.
+Flask==3.1.3
+actian-vectorai-client==1.0.2
