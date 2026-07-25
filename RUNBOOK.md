@@ -30,9 +30,13 @@ matters to this repo is only the shape of data it expects to receive.
 
 It's a thin orchestration layer (`agent/loop.py`) that takes that classified data and layers a
 small number of *genuinely real* integrations on top, rather than a stub for every tool named in
-the hackathon brief. That's a deliberate local-first stance, not an oversight: **Senso, VectorAI
-DB, and Pioneer are real, live integrations. Governance/audit-logging (what "Guild" would have
-covered) and session recording (what "Replay.io" would have covered) are handled locally —
+the hackathon brief. That's a deliberate local-first stance, not an oversight: **VectorAI DB and
+Pioneer are real, live integrations. Grounding (what "Senso" used to do) is local now too —
+`vectorai.ground_locally()` grounds an interest in other posts the user actually saved via
+VectorAI DB's own search, the same collection episodic recall already used, replacing a hosted
+KB search that only ever contained content this project itself pushed into it (see `ROADMAP.md`
+§1 for the full reasoning). Governance/audit-logging (what "Guild" would have covered) and
+session recording (what "Replay.io" would have covered) are handled locally —
 `agent/session_log.py` is a genuine first-party local audit trail, not a stub standing in for a
 hosted API, and Replay.io was dropped outright (a live key sat unused in `API.md` with zero
 adapter code — never pursued, not worth pretending otherwise).** Pioneer's own hosted API is
@@ -74,7 +78,7 @@ flowchart TD
     B1["⚠️ rejected — RuntimeError.<br/>Gradient only accepts already-enriched input;<br/>raw-export enrichment is an external, decoupled<br/>step run before the drop, with whatever tool<br/>the user chooses — not this repo's concern"]
     B -->|"already enriched"| SI
 
-    SI["senso.ingest_post() + vectorai.remember_posts()<br/>+ vectorai.update_status() (called from feedback, below)<br/>direct KB/memory writes, href-deduped —<br/>NOT orchestrator-routed, see deep dive §"]
+    SI["vectorai.remember_posts()<br/>+ vectorai.update_status() (called from feedback, below)<br/>direct KB/memory write, href-deduped —<br/>NOT orchestrator-routed, see deep dive §"]
     SI --> SESSIONLOG
 
     SI --> POL
@@ -82,9 +86,9 @@ flowchart TD
     subgraph ORCH["orchestrator.py — local Coordinator (ACP-shaped)<br/>the local stand-in for Band's coordination role"]
         direction TB
         POL["policy-reclassifier agent<br/>✅ REAL: wraps policy.py + reclassify.py —<br/>a real local LLM (Qwen3-30B-A3B via mlx_lm) judges<br/>should_surface against past-rejection exemplars"]
-        TAX["taxonomy-evolver agent<br/>✅ REAL: wraps taxonomy_evolver.evolve() on this<br/>pass's category=='other' posts — VectorAI clustering<br/>+ reuse-check + Senso grounding + local LLM namer,<br/>auto-mints a new category. Confirmed to actually<br/>promote one in practice, not just wired (see deep dive)"]
+        TAX["taxonomy-evolver agent<br/>✅ REAL: wraps taxonomy_evolver.evolve() on this<br/>pass's category=='other' posts — VectorAI clustering<br/>+ local grounding + local LLM namer,<br/>auto-mints a new category. Confirmed to actually<br/>promote one in practice, not just wired (see deep dive)"]
         CLS["classifier agent<br/>wraps planner.py: build_plans()<br/>group by category, drop 'entertainment_only'"]
-        GND["senso-grounder agent<br/>✅ REAL: wraps senso.ground()<br/>POST /org/search/context"]
+        GND["vectorai-grounder agent<br/>✅ REAL: wraps vectorai.ground_locally_many()<br/>local search over VectorAI DB's own memory"]
         REC["vectorai-recaller agent<br/>✅ REAL: wraps vectorai.recall_similar_many() —<br/>real nomic-embed-text-v1.5 embeddings, batched"]
         POL --> TAX
         TAX --> CLS
@@ -171,8 +175,9 @@ it's retried next pass.
 not part of the repo. A verification run (`./venv/bin/python main.py once`) against the
 git-tracked `fixtures/demo_export.json` (see GAPS_AND_FILL.md Part 1 §5 for what's in it — 22
 real, classified posts across 9 categories) confirmed the full pipeline end-to-end: 9 plans
-produced, 0 low-signal posts filtered, real Senso grounding and real VectorAI DB recall on every
-plan, zero failed agent dispatches. The earlier version of this line referenced
+produced, 0 low-signal posts filtered, real grounding and real VectorAI DB recall on every
+plan, zero failed agent dispatches (grounding was still Senso-backed at the time this line was
+first written; re-verified since on local grounding, see §5). The earlier version of this line referenced
 `data/drop/sample_export.json`, a real personal Instagram export used during development — that
 file was never git-tracked and no longer exists on disk; `fixtures/demo_export.json` is its
 git-tracked, curated replacement (DEMO.md §4 walks through the full feedback/retrain loop against
@@ -211,56 +216,68 @@ network, but relevant if this pattern is ever pointed at a real remote agent.)
 A `Coordinator` registers five named agents and dispatches `create_run(agent_name, input)` to
 them; a handler that raises fails only its own run (logged to the session log) instead of the whole
 pass. `loop.py` calls all five instead of calling
-`planner`/`policy`/`reclassify`/`senso`/`vectorai`/`taxonomy_evolver` directly:
+`planner`/`policy`/`reclassify`/`vectorai`/`taxonomy_evolver` directly:
 
 | Agent | Wraps | Real? |
 |---|---|---|
 | `policy-reclassifier` | `policy.load_current()` + `reclassify.apply_policy()` | ✅ real (§9) |
 | `classifier` | `planner.build_plans()` | plain local logic, no sponsor claim |
-| `senso-grounder` | `senso.ground()` | ✅ real (§5) |
+| `vectorai-grounder` | `vectorai.ground_locally_many()`, batched across all of a pass's plans | ✅ real (§5) |
 | `vectorai-recaller` | `vectorai.recall_similar_many()`, batched across all of a pass's plans | ✅ real (§5) |
 | `taxonomy-evolver` | `taxonomy_evolver.evolve()` on this pass's `category == "other"` posts | ✅ real — confirmed to actually promote a category in practice, not just wired (see below) |
 
-**Deliberately out of scope:** the KB/memory *write* steps — `senso.ingest_post()`,
-`vectorai.remember_posts()`, `vectorai.update_status()` — stay direct calls, not agents. They're
-href-dedup bookkeeping tied to their own state files (`senso_ingested.json`,
-`vectorai_remembered.json`), not "input in, output out" pipeline stages; wrapping them would
-add ceremony without payoff. This is a boundary decision, not an oversight.
+**Deliberately out of scope:** the KB/memory *write* step — `vectorai.remember_posts()`,
+`vectorai.update_status()` — stays a direct call, not an agent. It's href-dedup bookkeeping tied
+to its own state file (`vectorai_remembered.json`), not an "input in, output out" pipeline
+stage; wrapping it would add ceremony without payoff. This is a boundary decision, not an
+oversight. (This used to be two write steps — a matching Senso ingest ran alongside VectorAI DB
+remember — until grounding moved off Senso entirely; see ROADMAP.md §1.)
 
 Verified end-to-end (see §2): one real run produced 1 `policy-reclassifier` dispatch, 1
-`classifier` dispatch, 1 batched `vectorai-recaller` dispatch, and 5 `senso-grounder`
-dispatches (one per plan) — all `"completed"`, zero failures, all logged to
-`session_log.jsonl` as `orchestrator_run` events. `taxonomy-evolver` dispatches every
+`classifier` dispatch, 1 batched `vectorai-recaller` dispatch, and 1 batched `vectorai-grounder`
+dispatch (grounding every new plan's interest in one embed-subprocess call, not one per plan —
+same batching discipline as recall) — all `"completed"`, zero failures, all logged to
+`session_log.jsonl` as `orchestrator_run` events. Re-verified live after the Senso decoupling: a
+"food and cooking" plan's grounding correctly returned real citations from *other* saved
+food-and-cooking posts (a sourdough post's own href excluded from its own plan's citations, as
+designed). `taxonomy-evolver` dispatches every
 pass too (one `taxonomy_evolve` session-log event each time) and has been directly observed promoting
-a real category (`"home coffee roasting"`, from a genuine 3-post cluster with real Senso
+a real category (`"home coffee roasting"`, from a genuine 3-post cluster with real grounding
 citations and a cleared reuse-check) — treat that as "the mechanism works," not a claim about
 what `data/state/taxonomy/current.json` contains *right now*, since this repo's `data/state/`
 gets wiped and reseeded for fresh test runs often enough that a specific promotion's on-disk
 evidence doesn't persist.
 
-### 5. Grounding & memory — the two real integrations
+### 5. Grounding & memory — one real integration, two roles
 
-**`agent/adapters/senso.py`** is a verified live API: `POST /org/kb/raw` to push a
-classified post into Senso's knowledge base, and `POST /org/search/context` to pull raw
-context chunks back out for citation. Both endpoint shapes and a working `Cloudflare`
-User-Agent workaround were confirmed against the real API per the file's own header comment.
+Used to be two integrations here (Senso for grounding, VectorAI DB for memory). Senso's
+`ground()` searched a hosted KB that only ever contained content this project's own
+`senso.ingest_post()` had pushed into it — no independent external corpus, just this pipeline's
+own data round-tripped through a network call. That redundancy is why it was decoupled (see
+`ROADMAP.md` §1 for the full reasoning); `agent/adapters/senso.py` is deleted.
 
-Sound design choices worth noting:
-- `ground()` **always degrades to a stub result** (`grounded: false, source: "stub"`) on any
-  network/HTTP/JSON error — a Senso outage or empty KB never breaks publishing.
-- Ingestion is fire-and-forget: `_ingest_new_posts_into_senso()` marks an href as "seen" in
-  `senso_ingested.json` **even if the push failed**, by design, so a transient failure doesn't
-  cause the same post to be retried forever. The tradeoff: a Senso outage during one pass means
-  that post is *never* pushed to the KB again (no retry mechanism exists), permanently losing
-  that grounding opportunity.
-- Ingestion is async server-side ("processing" status on creation) — a post ingested this
-  pass may not be searchable by `ground()` until a later pass. Timing-dependent, not tested.
+**`agent/adapters/vectorai.py`** is now the one real integration doing both jobs — Actian
+VectorAI DB, self-hosted via Docker (`docker-compose.yml`, gRPC on `localhost:6574`):
 
-**`agent/adapters/vectorai.py`** is the other real integration — Actian VectorAI DB, self-
-hosted via Docker (`docker-compose.yml`, gRPC on `localhost:6574`), is the episodic-memory
-layer: every high-quality post gets embedded and upserted with its plan status, so the agent
-can answer "have we seen something like this before, and what happened to it" — a signal
-Senso's `ground()` doesn't provide, since it has no concept of past accept/reject outcomes.
+- **Memory** (`remember_posts()`/`recall_similar_many()`/`update_status()`): every high-quality
+  post gets embedded and upserted with its plan status, so the agent can answer "have we seen
+  something like this before, and what happened to it" — real episodic memory with a concept of
+  past accept/reject outcomes, which Senso's old `ground()` never had.
+- **Grounding** (`ground_locally()`/`ground_locally_many()`, new): searches that same collection
+  for *other* posts (excluding a plan's own items) supporting an interest, returning citations
+  in the same shape Senso's `ground()` used to (`{"grounded": bool, "citations": [str, ...],
+  "source": str}`) — a drop-in swap at both call sites (`vectorai-grounder` agent, §4;
+  `taxonomy_evolver.evolve()`'s promotion-evidence check, §9). `ground_locally_many()` batches
+  exactly like `recall_similar_many()` (one embed subprocess call for a whole pass's plans, not
+  one per plan) — the `senso-grounder` agent used to dispatch once *per plan* since Senso's HTTP
+  call was cheap enough not to matter; a local embed call is not, so `loop.py`'s grounding
+  dispatch was restructured to batch at the same point recall already did.
+- Citations are built from the same payload every memory point already carries
+  (`subcategory`/`action` — see `_flatten_citation()`), not a new text field — no schema change
+  needed to make local grounding work.
+- Always degrades to a stub result on any failure (`grounded: false, source: "stub"`), same
+  resilience contract as the rest of this adapter and as Senso's old `ground()` — a stopped
+  Docker container or missing model cache never breaks publishing.
 
 - Embeddings are **real local model output**, not a hashing trick and not a cloud API call:
   `embed_batch()` subprocesses into this repo's `venv/` (the same isolated env
@@ -276,9 +293,6 @@ Senso's `ground()` doesn't provide, since it has no concept of past accept/rejec
 - `update_status()` is called from `feedback.record()` to write the real
   accept/reject/share/invite outcome back onto the remembered point, so future recall reflects
   what actually happened, not just what was proposed.
-- Same resilience contract as Senso: every call degrades silently to a stub result
-  (`recalled: false`/`remembered: 0`, `source: "stub"`) on `VectorAIError` *or* a failed/timed-out
-  embed subprocess — a stopped Docker container or a missing model cache never breaks the loop.
 - `recall_similar_many()` drops hits below `MIN_RECALL_SCORE = 0.55` — calibrated against
   `nomic-embed-text-v1.5`'s ~0.4–0.5 baseline similarity between unrelated short phrases, so a
   real category match (0.7+ in manual testing) doesn't get drowned out by noise. A real recall
@@ -431,10 +445,10 @@ path — `main.py feedback <plan_id> accept|reject`) synchronously calls
   plan: plan-productivity-and-career"` — that plan had reverted to a state from before it was
   even created/touched. Fix, in `store.py`/`reevaluator.py`/`loop.py`: a module-level
   `store.PLANS_LOCK` (`threading.Lock`), held only around the *fast* final read-modify-write —
-  slow work (tagging, embedding, Senso grounding) runs with no lock held and no live `plans`
+  slow work (tagging, embedding, grounding) runs with no lock held and no live `plans`
   dict in hand, then the final commit re-reads `plans.json` fresh under the lock and applies
   just the computed deltas. `loop.py`'s own post-grounding write had the identical pattern
-  (`merged` snapshot held across per-plan Senso calls) and got the same fix. Verified by
+  (`merged` snapshot held across a slow grounding call) and got the same fix. Verified by
   reproducing the exact race deliberately — starting a plan submission, then hitting a
   *different* plan's `/feedback` while it was still running in the background — and confirming
   both changes persisted afterward. **Scope of the fix:** this is a `threading.Lock`, so it only

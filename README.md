@@ -29,15 +29,18 @@ the brief.
 
 | Tool | Status |
 |---|---|
-| **Senso** (`apiv2.senso.ai`) | ✅ real — KB ingest + grounding |
-| **VectorAI DB** (Actian, self-hosted) | ✅ real — episodic memory, taxonomy clustering |
+| **VectorAI DB** (Actian, self-hosted) | ✅ real — episodic memory, taxonomy clustering, and now grounding too (see below) |
 | **Pioneer** (`api.pioneer.ai`) | ✅ real API call every retrain pass, blocked by account billing — the actual retraining outcome comes from a local reimplementation instead |
 
-Not integrated, on purpose: **Guild** (governance/audit-logging is `agent/session_log.py`, a
-genuine first-party local log — not a stub waiting for a hosted API), **Band** (replaced with a
-local ACP-shaped orchestrator), **Replay.io** (dropped outright — a live credential sat unused
-with zero adapter code; removed rather than kept as a someday-gap), **x402/CDP payments**
-(monetization dropped outright as out of scope — no paywall, real or cosmetic).
+Not integrated, on purpose: **Senso** (decoupled — grounding used to search a hosted KB
+containing nothing this project's own corpus didn't already push into it; `vectorai.ground_locally()`
+now grounds an interest in other posts the user actually saved via VectorAI DB's own local search,
+same collection `recall_similar_many()` already used — see `ROADMAP.md` §1), **Guild**
+(governance/audit-logging is `agent/session_log.py`, a genuine first-party local log — not a stub
+waiting for a hosted API), **Band** (replaced with a local ACP-shaped orchestrator), **Replay.io**
+(dropped outright — a live credential sat unused with zero adapter code; removed rather than kept
+as a someday-gap), **x402/CDP payments** (monetization dropped outright as out of scope — no
+paywall, real or cosmetic).
 
 ## Repo-internal pieces
 

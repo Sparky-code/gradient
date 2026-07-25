@@ -32,7 +32,6 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PLANS_FILE", state_dir / "plans.json")
     monkeypatch.setattr(config, "PROCESSED_FILE", state_dir / "processed_files.json")
     monkeypatch.setattr(config, "TRAINING_QUEUE_FILE", state_dir / "training_queue.jsonl")
-    monkeypatch.setattr(config, "SENSO_INGESTED_FILE", state_dir / "senso_ingested.json")
     monkeypatch.setattr(config, "VECTORAI_REMEMBERED_FILE", state_dir / "vectorai_remembered.json")
     monkeypatch.setattr(config, "RETRAIN_REPORTS_DIR", state_dir / "retrain_reports")
     monkeypatch.setattr(config, "SESSION_LOG_FILE", state_dir / "session_log.jsonl")

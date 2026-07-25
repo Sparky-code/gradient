@@ -28,7 +28,6 @@ config.STATE_DIR = state_dir
 config.PLANS_FILE = state_dir / "plans.json"
 config.PROCESSED_FILE = state_dir / "processed_files.json"
 config.TRAINING_QUEUE_FILE = state_dir / "training_queue.jsonl"
-config.SENSO_INGESTED_FILE = state_dir / "senso_ingested.json"
 config.VECTORAI_REMEMBERED_FILE = state_dir / "vectorai_remembered.json"
 config.RETRAIN_REPORTS_DIR = state_dir / "retrain_reports"
 config.SESSION_LOG_FILE = state_dir / "session_log.jsonl"
