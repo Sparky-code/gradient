@@ -20,7 +20,7 @@ rather than holding a stale snapshot across the whole slow computation — see
 store.py's module docstring for the data-loss bug this design avoids.
 """
 
-from agent import cancellation, planner, publisher, session_log, store, taxonomy, taxonomy_evolver, tagger
+from agent import cancellation, exporter, planner, publisher, session_log, store, taxonomy, taxonomy_evolver, tagger
 from agent.adapters import vectorai
 
 REASSIGN_MIN_SCORE = vectorai.ANCHOR_REUSE_SCORE  # same "is this genuinely the same topic" bar
@@ -70,9 +70,16 @@ def reevaluate_plan(plan_id: str) -> dict:
 
     # ---- slow work below: no lock held, no live plans dict touched ----
 
-    tags = tagger.generate_tags(items_snapshot)
-    for item, item_tags in zip(items_snapshot, tags):
-        item["tags"] = item_tags
+    # Most items already carry tags from ingest-time (category-mapper, see
+    # orchestrator.py) — only tag the gaps (items that arrived via a prior
+    # reassignment with no tags yet, or where ingest-time tagging degraded to
+    # []), instead of re-running the local-LLM tagger on every item every time
+    # a plan resolves.
+    untagged = [item for item in items_snapshot if not item.get("tags")]
+    if untagged:
+        tags = tagger.generate_tags(untagged)
+        for item, item_tags in zip(untagged, tags):
+            item["tags"] = item_tags
 
     if cancellation.is_cancelled():
         # Nothing committed — the plan stays exactly as it was (still
@@ -82,7 +89,7 @@ def reevaluate_plan(plan_id: str) -> dict:
         return {"plan_id": plan_id, "status": plan_status, "cancelled": True}
 
     result = {
-        "plan_id": plan_id, "status": plan_status, "tagged": len(items_snapshot),
+        "plan_id": plan_id, "status": plan_status, "tagged": len(untagged),
         "reassigned": [], "taxonomy_promoted": None, "still_unassigned": 0,
     }
 
@@ -153,5 +160,6 @@ def reevaluate_plan(plan_id: str) -> dict:
         store.save_plans(plans)
 
     publisher.render()
+    exporter.render_all()
     session_log.log_session({"event": "plan_reevaluated", **result})
     return result

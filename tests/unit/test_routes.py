@@ -330,3 +330,43 @@ def test_cited_page_shows_published_content(client, isolated_env):
     resp = client.get("/cited")
     assert resp.status_code == 200
     assert b"hiking trails" in resp.data
+
+
+# ---------------------------------------------------------------------------
+# GET / Exports card, GET /exports/<filename>
+# ---------------------------------------------------------------------------
+
+def test_dashboard_shows_no_exports_placeholder_when_none_generated_yet(client, isolated_env):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"No exports yet" in resp.data
+
+
+def test_dashboard_shows_export_counts_and_download_links(client, isolated_env):
+    item = make_item(href="https://www.instagram.com/reel/MUSIC1/", subcategory="music recommendations")
+    item["entity_type"] = "music"
+    item["entity_fields"] = {"tracks": [{"artist": "someartist", "track": "Some Track"}]}
+    write_plans(make_plan(items=[item]))
+
+    from agent import exporter
+    exporter.render_all()
+
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"playlist.csv" in resp.data
+    assert f'/exports/playlist.csv'.encode() in resp.data
+
+
+def test_download_export_serves_file(client, isolated_env):
+    from agent import exporter
+    exporter.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    (exporter.EXPORTS_DIR / "playlist.csv").write_text("artist,track,href,plan_interest\n")
+
+    resp = client.get("/exports/playlist.csv")
+    assert resp.status_code == 200
+    assert b"artist,track,href,plan_interest" in resp.data
+
+
+def test_download_export_missing_file_returns_404(client, isolated_env):
+    resp = client.get("/exports/no-such-file.csv")
+    assert resp.status_code == 404

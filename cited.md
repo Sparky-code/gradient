@@ -1,6 +1,6 @@
 # cited.md
 
-_Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signal post(s) filtered out._
+_Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signal post(s) filtered out._
 
 ## ⏳ food and cooking — `plan-food-and-cooking` (pending)
 
@@ -37,10 +37,10 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - Hours: 11:30-27:30 (lunch until 15:00)
   - Near Roppongi, Nogizaka, and Hiroo Stations
   - source: <https://www.instagram.com/reel/C1JBjNevPJO/>
-  - _Senso-grounded citations:_
-    - test sanity check: Category: food and cooking / test sanity check Action: verify session_log rename didnt break anything Key facts: sanity check post Source: https://www.instagram.com/reel/SESSIONLOGTEST001/
-    - recipe / plated dish showcase: Category: food and cooking / recipe / plated dish showcase Action: Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link. Key facts: Crispy…
-    - easy weeknight dinner recipe: Category: other / easy weeknight dinner recipe Action: Cook a simple 20-minute weeknight dinner using pantry staples like pasta, garlic, and olive oil. Source:…
+  - _Grounded citations (other posts you saved):_
+    - cooking technique tutorial: Reference for next time you cook fish — pick a method (salt, sugar-salt, kombujime, or gravlax) based on the fish and occasion.
+    - recipe / plated dish showcase: Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link.
+    - easy weeknight dinner recipe: Cook a simple 20-minute weeknight dinner using pantry staples like pasta, garlic, and olive oil.
   - 🧠 _VectorAI DB recall — similar past posts:_
     - ⏳ `pending` (0.668): cooking technique tutorial — Reference for next time you cook fish — pick a method (salt, sugar-salt, kombujime, or gravlax) based on the fish and occasion.
     - ⏳ `pending` (0.667): recipe / plated dish showcase — Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link.
@@ -91,7 +91,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - Coffee, Hot Chocolate, Orange juice – $2
   - Pastries, vegetarian pancakes, oatmeal as gluten free option available
   - source: <https://www.instagram.com/reel/DOoHhEvkUj8/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - hiking trails and outdoor destinations: Category: travel and adventure / hiking trails and outdoor destinations Action: Explore these hiking trails and outdoor destinations for nature and scenic views. Key facts: Mount Tamalpais State…
     - hiking trails and outdoor destinations: Category: travel and adventure / hiking trails and outdoor destinations Action: Explore these hiking trails and outdoor destinations for nature and scenic views. Key facts: Mount Tamalpais State…
     - hidden / historic attraction: Category: travel and adventure / hidden / historic attraction Action: Add Gaustabanen (near Rjukan, Norway) to your travel wishlist. Key facts: Gaustabanen — secret WWII/Cold War-era NATO cable…
@@ -123,7 +123,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - It mentions the Reticular Activation System (RAS) as a neuroscience concept
   - It suggests using an app called Parrot to record and play back affirmations
   - source: <https://www.instagram.com/reel/C9NW0c7RIKT/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - wealth building strategies for families: Category: personal finance and investing / wealth building strategies for families Action: Use the strategies mentioned to build your own wealth through passive income, tax-efficient investing, and…
     - wealth building strategies for families: s; 40% in $VTI (Total Market); 30% in $VXUS (Total International); 30% in $QQQ (NASDAQ); Historical annual return of 12.2%; At age 65, $8.31M in investments; $2M in HSA; $36,000/year from STR…
     - manifestation techniques and neuroscience: Category: personal finance and investing / manifestation techniques and neuroscience Action: Apply the 4-step manifestation process to clarify and focus on what you want, and use the Parrot app to…
@@ -159,7 +159,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - Published Thu, Jan 25 2024 EST
   - Jennifer Liu
   - source: <https://www.instagram.com/reel/C-nXmeNucBY/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - career development and productivity tips: Category: productivity and career / career development and productivity tips Action: Implement the 8 weekly and monthly productivity and career development strategies listed in the post. Key facts:…
     - remote job resources and advice: Category: productivity and career / remote job resources and advice Action: Use the job boards and resources mentioned to find remote job opportunities. Key facts: #workfromanywhere; #remotework;…
     - productivity workflow / tools: Category: technology and innovation / productivity workflow / tools Action: Try this 5-step task system for a week. Key facts: 1) Brain-dump everything into a notes app; 2) Keep one running master…
@@ -186,7 +186,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - The Vibrant Life Method uses a system called “Focused Intensity Training” or FIT
   - Engage Fully, Mix It Up, Progressive Overload, Consistent Routine
   - source: <https://www.instagram.com/reel/C9uBWW2CQLL/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - fitness training technique: Category: fitness and wellness / fitness training technique Action: test Source: https://www.instagram.com/reel/C9NW0c7RIKT/
     - bodyweight training and muscle building: Category: fitness and wellness / bodyweight training and muscle building Action: Try the Vibrant Life Method's Focused Intensity Training (FIT) system for effective bodyweight workouts. Key facts: I…
     - bodyweight training and muscle building: two kids, and a demanding business I started doing short, focused bodyweight workouts; The secret? Consistency, proper form, and maximising each movement; The Vibrant Life Method uses a system called…
@@ -205,7 +205,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - The post references a full episode on syntax.fm/798
   - The post mentions service workers and local development
   - source: <https://www.instagram.com/reel/C9uthkNua_v/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - photo polymer stamp making: Category: technology and innovation / photo polymer stamp making Action: Follow the steps to make your own stamps using photo polymer printing plates and visit www.graphicclaystudio.com to purchase…
     - AI prompt hacking: Category: technology and innovation / AI prompt hacking Action: Use the 'Hitchhikers Guide To The Galaxy' prompt to test how AI models respond to unrestricted queries Key facts: The post describes a…
     - prepper tech / offline tools: Category: technology and innovation / prepper tech / offline tools Action: Consider assembling this as an actual emergency-prep kit: solar charger + phone + MAPS.ME + offline Wikipedia + a local LLM.…
@@ -236,7 +236,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - Featuring new chunes from PUMP!, Carlita, Marlon Hoffstadt, Kolter, Facu Baez, Eli & Fur, Franklyn Watts, Swave, Hyperbeam, Sammy Virji, Deetron, GTA, Yaya, Deeper Purpose, Shermanology, Chris Stussy, and more
   - Link in the usual place
   - source: <https://www.instagram.com/reel/C3Ykg_RPR8n/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - DJ playlist update: Category: music and entertainment / DJ playlist update Action: Check out the updated Spotify and Apple Music playlists for new tracks from various artists. Key facts: Spotify and Apple Music…
     - DJ mix / playlist update: Category: music and entertainment / DJ mix / playlist update Action: Check the creator's Spotify/Apple Music playlists for new house/tech-house tracks. Key facts: Updated house/tech-house Spotify +…
     - music recommendations: Category: music and entertainment / music recommendations Action: Check out these genre-bending records to expand your music taste. Key facts: New Internationale; Y’Y; Tension; II; Satellites;…
@@ -274,7 +274,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - Currently NOT open to the public
   - Updates on a new opening will be posted on the official website of RINRI Institute of Ethics
   - source: <https://www.instagram.com/reel/C1PQISVoNfg/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - test sanity check: Category: art and design / test sanity check Action: verify payments removal didnt break the pipeline Key facts: sanity check post Source: https://www.instagram.com/reel/PAYMENTSDROPTEST001/
     - architectural design and structure: Category: art and design / architectural design and structure Action: Consider visiting Kioi-Seido when it opens to the public, as it is an innovative architectural structure with no predefined…
     - photo polymer stamp making: Category: technology and innovation / photo polymer stamp making Action: Follow the steps to make your own stamps using photo polymer printing plates and visit www.graphicclaystudio.com to purchase…
@@ -291,7 +291,7 @@ _Generated 2026-07-25T01:05:16.659316+00:00 — 11 interest plan(s), 0 low-signa
   - Learn SQL through a mystery game
   - Includes walkthrough and reference links
   - source: <https://www.instagram.com/reel/DHynhznggmF/>
-  - _Senso-grounded citations:_
+  - _Grounded citations (other posts you saved):_
     - SQL learning game: Category: coding and software tools / SQL learning game Action: Play the SQL Murder Mystery game to practice and improve SQL skills. Key facts: SQL Murder Mystery game; Learn SQL through a mystery…
     - AI / coding education commentary: Category: technology and innovation / AI / coding education commentary Action: If genuinely interested in the concept, the real resource is Bruce Tate's book, not the bootcamp pitch (which is…
     - coding practice / game: Category: technology and innovation / coding practice / game Action: Search "SQL Murder Mystery" to find and bookmark the site. NOTE: the on-screen URL wasn't recoverable via OCR — a real gap for…

@@ -24,7 +24,7 @@ ROADMAP.md for the decoupling.
 import json
 import time
 
-from agent import cancellation, config, ingest, orchestrator, publisher, session_log, store, taxonomy
+from agent import cancellation, config, exporter, ingest, orchestrator, publisher, session_log, store, taxonomy
 from agent.adapters import pioneer, vectorai
 
 _coordinator = orchestrator.build_default_coordinator()
@@ -132,6 +132,57 @@ def _process_drop_file(drop_file) -> dict:
     if cancellation.is_cancelled():
         raise cancellation.Cancelled()
 
+    # Must run before classify: it's the only stage that sets tags/
+    # category_scores onto posts, which planner.build_plans() then copies
+    # onto items when it builds them.
+    category_map_run = _coordinator.create_run(
+        "category-mapper",
+        input=[orchestrator.Message(role="user", parts=[
+            orchestrator.MessagePart(content=posts, content_type="application/json"),
+        ])],
+    )
+    if category_map_run.status == "completed":
+        posts = category_map_run.output[0].parts[0].content
+
+    if cancellation.is_cancelled():
+        raise cancellation.Cancelled()
+
+    # Also must run before classify, same reasoning as category-mapper above:
+    # entity_type/entity_fields need to already be on each post by the time
+    # planner.build_plans() copies them onto items.
+    actionability_run = _coordinator.create_run(
+        "actionability-router",
+        input=[orchestrator.Message(role="user", parts=[
+            orchestrator.MessagePart(content=posts, content_type="application/json"),
+        ])],
+    )
+    if actionability_run.status == "completed":
+        posts = actionability_run.output[0].parts[0].content
+
+    if cancellation.is_cancelled():
+        raise cancellation.Cancelled()
+
+    # Runs alongside planning, not instead of it — same reasoning as
+    # taxonomy-evolver above: posts actionability.py couldn't type still flow
+    # into a normal plan below exactly as before (entity_type stays None);
+    # this just separately checks whether they're becoming a real, distinct
+    # export type. A newly-promoted type is backfilled starting next pass.
+    export_type_run = _coordinator.create_run(
+        "export-type-evolver",
+        input=[orchestrator.Message(role="user", parts=[
+            orchestrator.MessagePart(content=posts, content_type="application/json"),
+        ])],
+    )
+    export_type_result = (
+        export_type_run.output[0].parts[0].content if export_type_run.status == "completed" else None
+    )
+    if export_type_result:
+        session_log.log_session({"event": "export_type_evolve", "file": drop_file.name, **export_type_result})
+    export_type_promoted = 1 if export_type_result and export_type_result.get("promoted") else 0
+
+    if cancellation.is_cancelled():
+        raise cancellation.Cancelled()
+
     classify_run = _coordinator.create_run(
         "classifier",
         input=[orchestrator.Message(role="user", parts=[
@@ -211,6 +262,7 @@ def _process_drop_file(drop_file) -> dict:
         "new_plans": len(new_plans),
         "low_quality_count": low_quality_count,
         "taxonomy_promoted": taxonomy_promoted,
+        "export_type_promoted": export_type_promoted,
     }
 
 
@@ -224,6 +276,7 @@ def run_once() -> dict:
     total_new_plans = 0
     total_low_quality = 0
     total_taxonomy_promoted = 0
+    total_export_types_promoted = 0
     failed_files: list[str] = []
 
     if new_files:
@@ -249,8 +302,10 @@ def run_once() -> dict:
         total_new_plans += result["new_plans"]
         total_low_quality += result["low_quality_count"]
         total_taxonomy_promoted += result["taxonomy_promoted"]
+        total_export_types_promoted += result["export_type_promoted"]
 
     publisher.render(low_quality_count=total_low_quality)
+    exporter.render_all()
     session_log.log_session({
         "event": "publish", "new_files": len(new_files), "new_plans": total_new_plans,
         "failed_files": failed_files,
@@ -265,6 +320,7 @@ def run_once() -> dict:
         "new_plans": total_new_plans,
         "low_quality_filtered": total_low_quality,
         "taxonomy_categories_promoted": total_taxonomy_promoted,
+        "export_types_promoted": total_export_types_promoted,
         "retrain_report": retrain_report,
         "cancelled": cancellation.is_cancelled(),
         "failed_files": failed_files,

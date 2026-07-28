@@ -11,7 +11,7 @@ fixes (a stale full-plans snapshot held across a slow reevaluation silently
 reverting other plans' concurrent changes).
 """
 
-from agent import publisher, reevaluator, session_log, store
+from agent import exporter, publisher, reevaluator, session_log, store
 from agent.adapters import pioneer, vectorai
 
 DECISION_TO_STATUS = {
@@ -62,6 +62,7 @@ def record(plan_id: str, decision: str) -> dict:
     session_log.log_session({"event": "vectorai_update_status", "plan_id": plan_id, **memory_update})
 
     publisher.render()
+    exporter.render_all()
 
     # Whole-plan actions resolve the plan immediately in this one call — no
     # separate "submit" step exists for this entry point (that's per-item
@@ -120,6 +121,7 @@ def record_item(plan_id: str, href: str, decision: str) -> dict:
     session_log.log_session({"event": "vectorai_update_status", "plan_id": plan_id, **memory_update})
 
     publisher.render()
+    exporter.render_all()
     return plan
 
 

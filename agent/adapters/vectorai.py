@@ -52,6 +52,14 @@ HOST = "localhost:6574"
 COLLECTION = "agent_memory"
 TAXONOMY_CANDIDATES_COLLECTION = "taxonomy_candidates"  # "other"-bucketed posts awaiting cluster detection
 TAXONOMY_ANCHORS_COLLECTION = "taxonomy_anchors"        # current category list, embedded for reuse-weighting
+EXPORT_TYPE_CANDIDATES_COLLECTION = "export_type_candidates"  # actionable posts with no matching export
+                                                                # type yet, awaiting cluster detection —
+                                                                # same shape/purpose as TAXONOMY_CANDIDATES_
+                                                                # COLLECTION, a separate collection because
+                                                                # it's a different candidate pool, not decoration
+EXPORT_TYPE_ANCHORS_COLLECTION = "export_type_anchors"  # already-promoted EMERGENT export types, embedded
+                                                          # for reuse-weighting — mirrors TAXONOMY_ANCHORS_
+                                                          # COLLECTION's role, one level up the same pattern
 EMBEDDING_DIM = 256  # nomic-embed-text-v1.5 supports Matryoshka truncation to this size
 
 CLUSTER_MIN_SCORE = 0.62   # neighbor floor for "this is the same emerging topic," calibrated a
@@ -310,8 +318,19 @@ def ground_locally(query_text: str, limit: int = 3, exclude_hrefs: set[str] | No
 # static-taxonomy gap the reclassify/policy work never touched.
 
 def ensure_taxonomy_collections() -> None:
+    _ensure_collections(TAXONOMY_CANDIDATES_COLLECTION, TAXONOMY_ANCHORS_COLLECTION)
+
+
+def ensure_export_type_collections() -> None:
+    """Same role as ensure_taxonomy_collections(), one level up: export_type_evolver.py's
+    two collections (candidates awaiting cluster detection, anchors for
+    already-promoted emergent types) instead of taxonomy_evolver.py's."""
+    _ensure_collections(EXPORT_TYPE_CANDIDATES_COLLECTION, EXPORT_TYPE_ANCHORS_COLLECTION)
+
+
+def _ensure_collections(*names: str) -> None:
     with _client() as client:
-        for coll in (TAXONOMY_CANDIDATES_COLLECTION, TAXONOMY_ANCHORS_COLLECTION):
+        for coll in names:
             try:
                 client.collections.create(
                     coll, vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.Cosine),
@@ -320,12 +339,14 @@ def ensure_taxonomy_collections() -> None:
                 pass  # already exists
 
 
-def remember_candidates(posts: list[dict]) -> dict:
-    """Upsert a batch of 'other'-bucketed posts (InstaGone couldn't fit them into
-    any known category) into the candidate pool — one embed subprocess call for
-    the whole batch, the same batching discipline as remember_posts(); calling
-    embed() per-post in a loop would silently reintroduce the one-model-load-
-    per-item cost that pattern exists to avoid. Returns {"remembered": int, "reason": str|None}."""
+def remember_candidates(posts: list[dict], collection: str = TAXONOMY_CANDIDATES_COLLECTION) -> dict:
+    """Upsert a batch of posts with no home yet (taxonomy_evolver.py's 'other'-bucketed
+    posts, or export_type_evolver.py's actionable-but-untyped posts — same shape,
+    different candidate pool, hence the `collection` param) into VectorAI DB —
+    one embed subprocess call for the whole batch, the same batching discipline
+    as remember_posts(); calling embed() per-post in a loop would silently
+    reintroduce the one-model-load-per-item cost that pattern exists to avoid.
+    Returns {"remembered": int, "reason": str|None}."""
     postable = [p for p in posts if p.get("href")]
     if not postable:
         return {"remembered": 0, "reason": None}
@@ -335,12 +356,13 @@ def remember_candidates(posts: list[dict]) -> dict:
         return {"remembered": 0, "reason": "embedding unavailable (venv/model missing or timed out)"}
 
     try:
-        ensure_taxonomy_collections()
+        _ensure_collections(collection)
         with _client() as client:
-            client.points.upsert(TAXONOMY_CANDIDATES_COLLECTION, [
+            client.points.upsert(collection, [
                 PointStruct(id=_point_id(post["href"]), vector=vector, payload={
                     "href": post["href"], "subcategory": post.get("subcategory"),
                     "action": post.get("action"), "text": _post_text(post),
+                    "category": post.get("category"),
                 })
                 for post, vector in zip(postable, vectors)
             ])
@@ -351,6 +373,7 @@ def remember_candidates(posts: list[dict]) -> dict:
 
 def cluster_neighbors_many(
     posts: list[dict], min_score: float = CLUSTER_MIN_SCORE, limit: int = 10,
+    collection: str = TAXONOMY_CANDIDATES_COLLECTION,
 ) -> dict[str, list[dict]]:
     """Batch version: one embed subprocess call for every post's text, then a
     cheap local search per vector (gRPC, no subprocess) — the same batching
@@ -363,7 +386,7 @@ def cluster_neighbors_many(
     if vectors is None:
         return {p["href"]: [] for p in postable}
     return {
-        post["href"]: _cluster_search(vector, min_score, limit, exclude_href=post["href"])
+        post["href"]: _cluster_search(vector, min_score, limit, exclude_href=post["href"], collection=collection)
         for post, vector in zip(postable, vectors)
     }
 
@@ -374,11 +397,14 @@ def cluster_neighbors(post: dict, min_score: float = CLUSTER_MIN_SCORE, limit: i
     return cluster_neighbors_many([post], min_score, limit).get(href, []) if href else []
 
 
-def _cluster_search(vector: list[float], min_score: float, limit: int, exclude_href: str | None) -> list[dict]:
+def _cluster_search(
+    vector: list[float], min_score: float, limit: int, exclude_href: str | None,
+    collection: str = TAXONOMY_CANDIDATES_COLLECTION,
+) -> list[dict]:
     try:
         with _client() as client:
             hits = client.points.search(
-                TAXONOMY_CANDIDATES_COLLECTION, vector=vector, limit=limit + 1,
+                collection, vector=vector, limit=limit + 1,
                 score_threshold=min_score,
             )
         return [
@@ -390,7 +416,7 @@ def _cluster_search(vector: list[float], min_score: float, limit: int, exclude_h
         return []
 
 
-def sync_anchor_embeddings(category_texts: dict[str, str]) -> None:
+def sync_anchor_embeddings(category_texts: dict[str, str], collection: str = TAXONOMY_ANCHORS_COLLECTION) -> None:
     """Upsert an embedding per existing category, built from REAL representative
     post content (subcategory/action text), not the bare category name. Verified
     empirically why this matters: embedding just "food and cooking" scored only
@@ -411,9 +437,9 @@ def sync_anchor_embeddings(category_texts: dict[str, str]) -> None:
     if vectors is None:
         return
     try:
-        ensure_taxonomy_collections()
+        _ensure_collections(collection)
         with _client() as client:
-            client.points.upsert(TAXONOMY_ANCHORS_COLLECTION, [
+            client.points.upsert(collection, [
                 PointStruct(
                     id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"anchor:{name}")),
                     vector=vector, payload={"name": name},
@@ -424,8 +450,33 @@ def sync_anchor_embeddings(category_texts: dict[str, str]) -> None:
         pass
 
 
+def _anchor_search(
+    vector: list[float], min_score: float, limit: int, exclude: str | None,
+    collection: str = TAXONOMY_ANCHORS_COLLECTION,
+) -> list[dict]:
+    """Shared search against an anchor collection (TAXONOMY_ANCHORS_COLLECTION
+    by default; export_type_evolver.py passes EXPORT_TYPE_ANCHORS_COLLECTION) —
+    one gRPC call, no subprocess. Over-fetches by one extra hit when `exclude`
+    is set, since the excluded name (if present) still consumes a slot in
+    VectorAI DB's own `limit`. Silently degrades to [] on any VectorAIError,
+    same contract as every other search helper in this module."""
+    try:
+        with _client() as client:
+            hits = client.points.search(
+                collection, vector=vector,
+                limit=limit + 1 if exclude else limit, score_threshold=min_score,
+            )
+        return [
+            {"name": h.payload["name"], "score": round(h.score, 3)}
+            for h in hits if h.payload and h.payload["name"] != exclude
+        ][:limit]
+    except VectorAIError:
+        return []
+
+
 def nearest_anchor_many(
     texts: list[str], min_score: float = ANCHOR_REUSE_SCORE, exclude: str | None = None,
+    collection: str = TAXONOMY_ANCHORS_COLLECTION,
 ) -> list[dict | None]:
     """Batch version: one embed subprocess call for every text, then a cheap
     local search per vector — same batching discipline as
@@ -437,28 +488,12 @@ def nearest_anchor_many(
     vectors = embed_batch(texts, kind="query")
     if vectors is None:
         return [None] * len(texts)
-
-    results = []
-    for vector in vectors:
-        try:
-            with _client() as client:
-                hits = client.points.search(
-                    TAXONOMY_ANCHORS_COLLECTION, vector=vector,
-                    limit=2 if exclude else 1, score_threshold=min_score,
-                )
-            match = next(
-                ({"name": h.payload["name"], "score": round(h.score, 3)} for h in hits
-                 if h.payload and h.payload["name"] != exclude),
-                None,
-            )
-        except VectorAIError:
-            match = None
-        results.append(match)
-    return results
+    return [(_anchor_search(vector, min_score, 1, exclude, collection) or [None])[0] for vector in vectors]
 
 
 def nearest_anchor(
     text: str, min_score: float = ANCHOR_REUSE_SCORE, exclude: str | None = None,
+    collection: str = TAXONOMY_ANCHORS_COLLECTION,
 ) -> dict | None:
     """Single-text convenience wrapper around nearest_anchor_many(). Two
     callers, two purposes: taxonomy_evolver.py uses this with no exclusion —
@@ -466,5 +501,43 @@ def nearest_anchor(
     None. reevaluator.py's batched caller passes `exclude` (the item's own
     just-rejected category) — reassignment asks "does a DIFFERENT existing
     category fit better," so the category it was just rejected from can't be
-    the answer even if it's the closest match."""
-    return nearest_anchor_many([text], min_score, exclude)[0]
+    the answer even if it's the closest match. export_type_evolver.py passes
+    `collection=EXPORT_TYPE_ANCHORS_COLLECTION` to run the same reuse-check
+    against already-promoted emergent export types instead of categories."""
+    return nearest_anchor_many([text], min_score, exclude, collection)[0]
+
+
+MULTI_LABEL_TOP_K = 5
+MULTI_LABEL_MIN_SCORE = 0.55  # looser than ANCHOR_REUSE_SCORE (0.62): nearest_anchor_many() answers
+# "is this genuinely the same topic as an existing category" (a strict reuse-vs-new-mint decision);
+# top_k_anchors_many() answers "which categories does this post plausibly relate to," a multi-label
+# membership question that wants several candidates, not one strict match — so it reuses
+# MIN_RECALL_SCORE's floor (same value, same "plausible signal, not noise" reasoning) instead.
+
+
+def top_k_anchors_many(
+    texts: list[str], k: int = MULTI_LABEL_TOP_K, min_score: float = MULTI_LABEL_MIN_SCORE,
+    exclude: str | None = None,
+) -> list[list[dict]]:
+    """Multi-label variant of nearest_anchor_many(): same collection, same
+    embeddings, same batching discipline (one embed subprocess call for every
+    text, then a cheap local search per vector) — just returns every anchor
+    above `min_score`, not only the single nearest one. This is the "vector
+    map of categories a post relates to" a post gets scored against, in
+    addition to (never instead of) the single `category` planner.py already
+    groups plans by. Returns [[{"name","score"}, ...], ...], one list per
+    input text, sorted by score desc, possibly empty."""
+    if not texts:
+        return []
+    vectors = embed_batch(texts, kind="query")
+    if vectors is None:
+        return [[] for _ in texts]
+    return [_anchor_search(vector, min_score, k, exclude) for vector in vectors]
+
+
+def top_k_anchors(
+    text: str, k: int = MULTI_LABEL_TOP_K, min_score: float = MULTI_LABEL_MIN_SCORE,
+    exclude: str | None = None,
+) -> list[dict]:
+    """Single-text convenience wrapper around top_k_anchors_many()."""
+    return top_k_anchors_many([text], k, min_score, exclude)[0]

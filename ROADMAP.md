@@ -10,9 +10,16 @@ at all.
 
 ---
 
-## 1. Decouple from Senso
+## 1. Decouple from Senso — ✅ DONE
 
-### What Senso does today
+**Status: shipped.** `agent/adapters/senso.py` is deleted, `agent/adapters/vectorai.py` now has
+`ground_locally()`/`ground_locally_many()`, both call sites below are swapped, and the `API.md`
+key is removed. See `RUNBOOK.md` §5/§10 and `GAPS_AND_FILL.md`'s resolved "Senso was a redundant
+hosted grounding dependency" row for the implementation record — the reasoning below is kept
+as-written since it's still the accurate "why," not just history. Item 5's open question is the
+one part of this section still genuinely unresolved.
+
+### What Senso did before this
 
 Two call sites, both in the hot path, per `RUNBOOK.md` §5 and §8:
 
@@ -25,9 +32,9 @@ Two call sites, both in the hot path, per `RUNBOOK.md` §5 and §8:
   `taxonomy_evolver.evolve()` (grounding a *candidate new category* before promoting it, so a
   taxonomy promotion isn't just a clustering artifact — it has real supporting text behind it).
 
-Both are real, live, working integrations — this isn't a "replace a stub" gap like Guild or
-Replay.io was. The reason to decouple isn't that Senso is fake; it's that it's an external
-hosted dependency for something this project already has the raw material to do itself.
+Both were real, live, working integrations — this wasn't a "replace a stub" gap like Guild or
+Replay.io was. The reason to decouple wasn't that Senso was fake; it's that it was an external
+hosted dependency for something this project already had the raw material to do itself.
 
 ### Why this is actually redundant, not just undesirable
 
@@ -50,25 +57,24 @@ own merits, not just as a decoupling exercise.
 
 ### What's needed to fill the gap
 
-1. **A local grounding function**, `vectorai.ground_locally(query: str, exclude_hrefs: set[str])
-   -> dict`, shaped like `senso.ground()`'s return (`{"grounded": bool, "citations": [str, ...],
-   "source": "vectorai"}`) so it's a drop-in swap at both call sites. Needs real text payloads
-   stored per point, not just embeddings — check whether `vectorai.remember_posts()` already
-   stores enough of the post's text in its payload (`subcategory`/`action`/`key_facts`) to
-   generate a citation-quality chunk, or whether the collection needs a `content` field added.
-2. **Swap the `senso-grounder` agent's handler** in `orchestrator.build_default_coordinator()`
-   to call the new local function instead of `senso.ground()`. No change needed to the agent
-   *shape* — same input/output contract, same dispatch, same session-log event.
-3. **Swap `taxonomy_evolver.evolve()`'s grounding step** the same way — this one's lower risk
-   to cut over first, since taxonomy promotion evidence is already scoped to the candidate
-   cluster's own member posts, which is exactly the kind of "your own content" grounding this
-   local approach is naturally suited for.
-4. **Decide what happens to `senso.ingest_post()`.** Once `ground()` no longer reads from
-   Senso's KB, ingesting into it has no downstream consumer — it becomes dead code, not a
-   smaller integration. Either cut it at the same time as `ground()`, or keep ingesting for a
-   transition period if there's a reason to want Senso's KB populated independently (e.g.
-   comparing local vs. hosted grounding quality before fully committing). Don't leave it
-   half-decoupled — a write with no reader is worse than no integration at all.
+1. ✅ **A local grounding function** — `vectorai.ground_locally()`/`ground_locally_many()`,
+   shaped like Senso's old `ground()` return (`{"grounded": bool, "citations": [str, ...],
+   "source": str}`). Turned out `remember_posts()`'s existing payload (`subcategory`/`action`)
+   was already enough for a citation-quality line — no `content` field or schema change needed.
+2. ✅ **Swapped the grounding agent's handler** — renamed `senso-grounder` → `vectorai-grounder`
+   in `orchestrator.build_default_coordinator()`. Went further than "same shape, same dispatch":
+   the old agent dispatched once *per plan* (fine when the underlying call was a cheap Senso HTTP
+   request); the new one batches every new plan's interest into one `ground_locally_many()` call,
+   matching `vectorai-recaller`'s existing batching discipline — a local embed subprocess call
+   costs ~10s regardless of batch size, so doing it once per plan would have reintroduced the
+   exact per-item-model-load anti-pattern this codebase has fixed elsewhere.
+3. ✅ **Swapped `taxonomy_evolver.evolve()`'s grounding step** — a single-item `ground_locally()`
+   call, excluding the candidate cluster's own member hrefs so it has to find genuinely other
+   supporting content, not just echo the cluster back at itself.
+4. ✅ **Decided what happens to `senso.ingest_post()` — cut it, not kept for a transition.**
+   Once `ground()` no longer reads from Senso's KB, ingesting into it had no downstream consumer.
+   Removed alongside `ground()`'s swap: the write, its `senso_ingested.json` dedup file, and the
+   tracking function in `loop.py` are all gone.
 5. **Open question, not yet answered: is external grounding worth adding back later, deliberately
    this time?** Decoupling from Senso removes the *only* source of context outside what the user
    themselves saved. If "ground this interest in real information beyond your own posts" turns
@@ -191,13 +197,13 @@ notice the pattern and no way to act on it without the learning-plan structuring
 
 ## Sequencing
 
-**§2 first** — cheapest, no design risk, and makes every other change in this roadmap (including
-§1's local grounding and §3's profile) something a person can actually *see* land, rather than
-another thing that only shows up in a JSONL file. **§1 next** — closes the local-first gap
-properly and produces the exact "grounded in your own content" pattern §3 needs anyway, so
-building it now isn't wasted if §3 takes longer to scope. **§3 last**, deliberately — it's the
-most valuable direction long-term but also the least scoped right now (the self-profile's data
-shape, the learning-plan ordering logic, and the external-grounding question in §1 all need real
-design decisions before implementation starts), and doing it on top of §1+§2 instead of
-underneath them means it inherits a visible, trustworthy foundation instead of another opaque
-process nobody can see the reasoning behind.
+**§1 shipped out of order** relative to the original plan below (it was tackled before §2), which
+turned out fine — it was self-contained and didn't depend on §2's UI work landing first. **§2
+next** — cheapest of what's left, no design risk, and makes every other change in this roadmap
+(including §1's local grounding, now live, and §3's profile) something a person can actually
+*see*, rather than another thing that only shows up in a JSONL file. **§3 last**, deliberately —
+it's the most valuable direction long-term but also the least scoped right now (the
+self-profile's data shape, the learning-plan ordering logic, and §1's still-open
+external-grounding question all need real design decisions before implementation starts), and
+doing it on top of §1+§2 instead of underneath them means it inherits a visible, trustworthy
+foundation instead of another opaque process nobody can see the reasoning behind.

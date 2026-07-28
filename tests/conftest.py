@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from agent import config, policy, store, taxonomy  # noqa: E402
+from agent import config, export_types, exporter, policy, store, taxonomy  # noqa: E402
 from agent.adapters import vectorai  # noqa: E402
 
 
@@ -45,6 +45,14 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setattr(policy, "CURRENT_FILE", state_dir / "policy" / "current.json")
     monkeypatch.setattr(taxonomy, "TAXONOMY_DIR", state_dir / "taxonomy")
     monkeypatch.setattr(taxonomy, "CURRENT_FILE", state_dir / "taxonomy" / "current.json")
+    monkeypatch.setattr(export_types, "EXPORT_TYPES_DIR", state_dir / "export_types")
+    monkeypatch.setattr(export_types, "CURRENT_FILE", state_dir / "export_types" / "current.json")
+    monkeypatch.setattr(exporter, "EXPORTS_DIR", state_dir / "exports")
+    monkeypatch.setattr(exporter, "EXPORTS_MANIFEST_FILE", state_dir / "exports" / "manifest.json")
+    monkeypatch.setattr(exporter, "PLAYLIST_CSV", state_dir / "exports" / "playlist.csv")
+    monkeypatch.setattr(exporter, "PLACES_CSV", state_dir / "exports" / "places.csv")
+    monkeypatch.setattr(exporter, "RECIPES_DIR", state_dir / "exports" / "recipes")
+    monkeypatch.setattr(exporter, "SHOPPING_LIST_MD", state_dir / "exports" / "shopping_list.md")
 
     config.ensure_dirs()
     return {"tmp_path": tmp_path, "data_dir": data_dir, "state_dir": state_dir}

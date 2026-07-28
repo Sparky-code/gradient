@@ -122,6 +122,7 @@ def _snapshot_targets() -> dict[str, Path]:
         "cited.md": config.CITED_MD,
         "policy_current.json": config.STATE_DIR / "policy" / "current.json",
         "taxonomy_current.json": config.STATE_DIR / "taxonomy" / "current.json",
+        "export_types_current.json": config.STATE_DIR / "export_types" / "current.json",
     }
 
 

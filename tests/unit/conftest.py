@@ -36,7 +36,7 @@ def client(isolated_env, stub_vectorai, monkeypatch):
 @pytest.fixture
 def stub_run_once(monkeypatch):
     """Replace the real ingest->plan->publish->retrain pipeline (heavy: local
-    LLM subprocesses, VectorAI, Senso) with a fast fake, and record calls."""
+    LLM subprocesses, VectorAI DB) with a fast fake, and record calls."""
     calls = []
 
     def _fake(*args, **kwargs):

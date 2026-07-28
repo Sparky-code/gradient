@@ -21,14 +21,16 @@ mechanisms feed into the file, and they answer three different questions:
 | Mechanism | Question it answers | Where it shows up |
 |---|---|---|
 | `source: <href>` | Where did this actually come from? | Every single item, no exceptions |
-| Senso grounding | Is there real supporting context for this *interest as a whole*, beyond one post? | `_Senso-grounded citations:_` under a plan, pulled from Senso's knowledge base via `POST /org/search/context` |
+| VectorAI DB grounding | Do *other posts you saved* actually support this being a real, recurring interest, not just one post? | `_Grounded citations (other posts you saved):_` under a plan, pulled from VectorAI DB's own local semantic search — this used to be a separate hosted KB (Senso), decoupled once it became clear that KB only ever held content this pipeline itself had pushed into it (see `ROADMAP.md` §1) |
 | VectorAI DB recall | Has something like this come up before, and what did I decide about it last time? | `🧠 VectorAI DB recall — similar past posts:` — real semantic search over prior accept/reject history |
 
-That third one is the interesting one for a "self-evolving" pitch: it's not
-just citing external sources, it's citing *your own past decisions* back to
-you. A new "home coffee roasting" post surfacing next to "you rejected
-something almost identical to this three weeks ago" is the file citing your
-own feedback loop as evidence.
+Both of the last two are the interesting ones for a "self-evolving" pitch, and they're not
+external sources — they're both citing *you* back to yourself, just at different grains.
+Grounding cites *other content* you saved ("three other posts you saved are also about
+sourdough baking"); recall cites *decisions* you made ("you rejected something almost identical
+to this three weeks ago"). Neither one is reaching outside what you actually gave this system —
+that's a deliberate, not accidental, property (see `ROADMAP.md` §1's open question about whether
+a *learning* plan, someday, should reach further than your own saved posts do).
 
 ## Anatomy of the file
 
@@ -47,7 +49,7 @@ Reading top to bottom, in the order `agent/publisher.py` actually writes it:
    (`wishlist_place`, `how_to`, `recipe`, etc.), status, tags (from the
    tagger pass, added when an item gets reassigned), the action itself, any
    extracted key facts, the source link, and — if this pass found them —
-   Senso citations and VectorAI recall hits.
+   grounding citations and VectorAI recall hits (both from VectorAI DB now).
 4. **A feedback instruction line** per plan, telling you exactly how to act
    on it (dashboard buttons, or the equivalent CLI command) — the file
    doesn't just report, it hands you the next action.
@@ -98,8 +100,8 @@ report:
 - **Reject** → the item is pulled out of its plan and run back through the
   agent: tagged, checked against every *other* existing category for a better
   fit (`nearest_anchor_many`), and — if nothing fits — used as evidence toward
-  promoting a genuinely new category via the taxonomy evolver, grounded in
-  Senso and named by the local model. A rejection isn't a dead end; it's the
+  promoting a genuinely new category via the taxonomy evolver, grounded locally
+  in VectorAI DB and named by the local model. A rejection isn't a dead end; it's the
   input that makes the next `cited.md` categorize things better than this one
   did.
 - **Enough rejections in a category** → the policy layer can suppress that

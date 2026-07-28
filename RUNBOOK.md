@@ -481,10 +481,16 @@ path — `main.py feedback <plan_id> accept|reject`) synchronously calls
 
 ### 10. Sponsor tools intentionally not integrated
 
-`hackathon-research.md` designs a layered stack (Senso / VectorAI DB / Guild / Pioneer). Senso,
-VectorAI DB, and Pioneer are real, live integrations (§5, §9). The rest were deliberate
+`hackathon-research.md` designs a layered stack (Senso / VectorAI DB / Guild / Pioneer).
+VectorAI DB and Pioneer are real, live integrations (§5, §9). The rest were deliberate
 local-first decisions, not gaps waiting to be filled:
 
+- **Senso** — was a real, live integration (§5's original version); decoupled deliberately, not
+  because it was broken. Its `ground()` searched a hosted KB containing nothing this pipeline's
+  own `ingest_post()` hadn't already pushed into it, which VectorAI DB's own memory collection
+  already held a copy of — redundant, not a distinct capability. Replaced by
+  `vectorai.ground_locally()`; `agent/adapters/senso.py` is deleted, its `API.md` key removed.
+  See `ROADMAP.md` §1 for the full before/after reasoning.
 - **Guild** — governance/audit-logging is handled by `agent/session_log.py` (§8), a genuine
   first-party local audit trail. There's no external Guild API call anywhere, and there's no
   plan to add one — a local-first agent shouldn't route its own audit trail through a hosted
@@ -503,14 +509,13 @@ local-first decisions, not gaps waiting to be filled:
 |---|---|---|
 | `data/state/processed_files.json` | `loop.py` | Dedup — which drop files have been ingested |
 | `data/state/plans.json` | `store.py` | Canonical plan state; source of truth for `cited.md` |
-| `data/state/senso_ingested.json` | `loop.py` | Dedup — which post hrefs were pushed to Senso (regardless of push success) |
 | `data/state/vectorai_remembered.json` | `loop.py` | Dedup — which post hrefs were upserted into VectorAI DB (regardless of push success) |
 | `data/state/training_queue.jsonl` | `pioneer.py` | Pending feedback examples; flushed + deleted every 5 |
 | `data/state/policy/current.json` + `v*.json` | `policy.py` | The real, versioned few-shot exemplar policy Pioneer promotes — `current.json` is a copy of the latest `vN.json` |
 | `data/state/retrain_reports/*.json` | `pioneer.py` | One file per retrain/promote decision (real policy artifact, see §9) |
 | `data/state/session_log.jsonl` | `session_log.py` | Append-only local audit log of every event, including every `orchestrator_run` dispatch (§4) |
 | `cited.md` | `publisher.py` | The published, user-facing output — full rewrite each pass |
-| `API.md` | manual | Plaintext API keys for Senso/Pioneer — **gitignored**, but lives unencrypted on disk with no rotation. Both are actually loaded and called (Replay.io's credential was removed, §10 — never integrated) |
+| `API.md` | manual | Plaintext API key for Pioneer — **gitignored**, but lives unencrypted on disk with no rotation. Loaded and called every retrain pass (Senso's key was removed, §5/§10 — decoupled; Replay.io's was removed, §10 — never integrated) |
 
 ### 12. Other gaps worth flagging
 
@@ -529,7 +534,7 @@ local-first decisions, not gaps waiting to be filled:
   `self-evolve-agent-vectorai`) — another single-machine runtime dependency; every adapter call
   degrades to a stub if it's down, but nothing auto-starts it.
 - **`run_loop()`** has no shutdown handling (`Ctrl-C` just raises `KeyboardInterrupt`
-  mid-pass — a plan write or Senso call could be interrupted partway) and no protection
+  mid-pass — a plan write or grounding call could be interrupted partway) and no protection
   against two `loop` processes running against the same `data/state/` concurrently.
 - **Cross-process concurrency is now handled.** §9 documents a real same-process race that was
   found and fixed (`store.PLANS_LOCK`). That lock is no longer just a `threading.Lock` — it also

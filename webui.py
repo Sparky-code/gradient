@@ -28,14 +28,17 @@ Routes:
                       run/submit result or error) — otherwise these persist
                       forever across page loads
   GET  /cited            raw cited.md
+  GET  /exports/<file>    download one generated export artifact (playlist.csv,
+                      places.csv, a recipe card, shopping_list.md, or a
+                      generic emergent-type file) — see agent/exporter.py
 """
 
 import json
 import threading
 
-from flask import Flask, redirect, render_template_string, request, url_for
+from flask import Flask, redirect, render_template_string, request, send_from_directory, url_for
 
-from agent import cancellation, config, feedback, loop, policy, store
+from agent import cancellation, config, exporter, feedback, loop, policy, store
 
 app = Flask(__name__)
 
@@ -225,6 +228,8 @@ PAGE = """
   .badge.shared, .badge.invited { background: var(--linked); }
   .badge.mixed { background: var(--mixed); }
   .badge.small { font-size: .62rem; padding: .05rem .4rem; margin-right: .4rem; }
+  .badge.entity-badge { background: var(--linked); }
+  .badge.tag-badge { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
   .empty { color: var(--text-muted); font-style: italic; }
 
   [data-tooltip] { position: relative; }
@@ -503,7 +508,20 @@ PAGE = """
         <li class="item-row {{ item.get('status', 'pending') }}">
           <div class="item-text">
             <span class="badge small item-badge {{ item.get('status', 'pending') }}">{{ item.get('status', 'pending') }}</span>
+            {% if item.get('entity_type') %}
+            <span class="badge small entity-badge" data-tooltip="Actionability: this item was routed into a structured {{ item.entity_type }} export — see the Exports section below.">{{ item.entity_type }}</span>
+            {% endif %}
+            {% for tag in item.get('tags') or [] %}
+            <span class="badge small tag-badge">{{ tag }}</span>
+            {% endfor %}
             <b>{{ item.subcategory }}</b> <span class="meta">({{ item.actionable }})</span>: {{ item.action }}
+            {% if item.get('category_scores') %}
+            <span class="info-icon" tabindex="0" aria-label="Related categories"
+              data-tooltip="Vector category map: {% for m in item.category_scores %}{{ m.name }} ({{ m.score }}){{ ', ' if not loop.last }}{% endfor %}">i</span>
+            {% endif %}
+            {% if item.get('source_collection') and item.source_collection.name %}
+            <span class="meta" data-tooltip="The Instagram Collection folder you originally saved this into.">&middot; filed under &ldquo;{{ item.source_collection.name }}&rdquo;</span>
+            {% endif %}
           </div>
           <form class="feedback item-feedback" method="post" action="{{ url_for('give_feedback') }}">
             <input type="hidden" name="plan_id" value="{{ plan.plan_id }}">
@@ -530,6 +548,30 @@ PAGE = """
 
 <h2 class="section-title">Published output</h2>
 <p><a class="link-card" href="{{ url_for('view_cited') }}">View raw cited.md &rarr;</a></p>
+
+<h2 class="section-title">Exports
+  <span class="info-icon" tabindex="0" aria-label="What are exports?"
+    data-tooltip="Music/location/recipe items (and any other export type the agent has minted on its own) rendered into structured local files you can import elsewhere — a playlist CSV, a places CSV, recipe cards + a shopping list. No external accounts or API calls.">i</span>
+</h2>
+{% if exports_manifest and exports_manifest.types %}
+<div class="card">
+  {% for t in exports_manifest.types %}
+    {% if t.files %}
+    <div class="stat-row" style="margin-bottom: {{ '0' if loop.last else '.75rem' }}">
+      <div>
+        <span class="stat-label">{{ t.name }}{% if t.kind == 'emergent' %} <span class="badge small">new</span>{% endif %}</span>
+        <span class="stat-value">{{ t.count }}</span>
+      </div>
+      <div class="meta">
+        {% for f in t.files %}<a href="{{ url_for('download_export', filename=f) }}">{{ f }}</a>{{ ', ' if not loop.last }}{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% else %}
+<p class="empty">No exports yet — run a cycle to generate them from actionable items.</p>
+{% endif %}
 
 <h2 class="section-title">Recent activity <span class="count">last 15</span></h2>
 <div class="card table-wrap">
@@ -696,6 +738,12 @@ CITED_PAGE = """
 """
 
 
+def _exports_manifest() -> dict | None:
+    if not exporter.EXPORTS_MANIFEST_FILE.exists():
+        return None
+    return json.loads(exporter.EXPORTS_MANIFEST_FILE.read_text())
+
+
 @app.route("/")
 def dashboard():
     plans = sorted(store.load_plans().values(), key=lambda p: len(p["items"]), reverse=True)
@@ -704,6 +752,7 @@ def dashboard():
         PAGE, plans=plans, run_state=_run_state, submit_state=_submit_state,
         current_policy=policy.load_current(), session_log_tail=_session_log_tail(),
         latest_snapshot=snapshots[0] if snapshots else None,
+        exports_manifest=_exports_manifest(),
     )
 
 
@@ -802,6 +851,15 @@ def submit_plan():
 def view_cited():
     content = config.CITED_MD.read_text() if config.CITED_MD.exists() else "(no cited.md yet — run a cycle first)"
     return render_template_string(CITED_PAGE, content=content)
+
+
+@app.route("/exports/<path:filename>")
+def download_export(filename):
+    """Serves a single export artifact (playlist.csv, places.csv, a recipe
+    card, the shopping list, or a generic emergent-type file) — send_from_directory
+    keeps this safe against path traversal by construction, same reasoning as
+    every other file-serving route needs, even on a localhost-only dashboard."""
+    return send_from_directory(exporter.EXPORTS_DIR, filename, as_attachment=True)
 
 
 if __name__ == "__main__":

@@ -113,7 +113,10 @@ def build_default_coordinator() -> Coordinator:
     ("other"). Registering them here — instead of loop.py calling
     reclassify/planner/vectorai/taxonomy_evolver directly — is what let
     this fifth agent get added without loop.py's dispatch shape changing."""
-    from agent import planner, policy, reclassify, taxonomy_evolver
+    from agent import (
+        actionability, export_type_evolver, export_types, planner, policy,
+        reclassify, tagger, taxonomy, taxonomy_evolver,
+    )
     from agent.adapters import vectorai
 
     coordinator = Coordinator()
@@ -201,6 +204,74 @@ def build_default_coordinator() -> Coordinator:
                     "existing category, checks it isn't already covered, grounds it against "
                     "VectorAI DB's own local memory, and auto-promotes a new versioned category if warranted.",
         handler=_taxonomy_evolve,
+    ))
+
+    def _category_map(input: list[Message]) -> list[Message]:
+        posts = input[0].parts[0].content
+        # Same quality filter planner.py itself applies — no point tagging/scoring
+        # a post that's about to be filtered out of every plan anyway.
+        taggable = [p for p in posts if p.get("actionable") not in planner.LOW_QUALITY_ACTIONABLE]
+        if taggable:
+            current_taxonomy = taxonomy.load_current()
+            # Reuses taxonomy_evolver's own anchor-content builder (already a
+            # cross-module call from reevaluator.py) so anchors reflect real
+            # representative content, not bare category names — same reasoning
+            # as sync_anchor_embeddings()'s own docstring.
+            vectorai.sync_anchor_embeddings(
+                taxonomy_evolver._category_representative_texts(posts, current_taxonomy["categories"])
+            )
+            tags = tagger.generate_tags(taggable)
+            for post, post_tags in zip(taggable, tags):
+                post["tags"] = post_tags
+            texts = [
+                f"{p.get('subcategory') or ''} {p.get('action') or ''} {' '.join(p.get('tags') or [])}".strip()
+                for p in taggable
+            ]
+            top_k = vectorai.top_k_anchors_many(texts)
+            for post, matches in zip(taggable, top_k):
+                post["category_scores"] = matches
+        return [Message(role="agent/category-mapper", parts=[
+            MessagePart(content=posts, content_type="application/json"),
+        ])]
+
+    coordinator.register(AgentManifest(
+        name="category-mapper",
+        description="Tags each high-quality post via the local model, then scores it against every "
+                    "known category anchor (not just the nearest one) via VectorAI DB's taxonomy_anchors "
+                    "collection — a multi-label vector map of categories a post relates to, layered "
+                    "alongside (never replacing) the single-category plan grouping classifier.py builds.",
+        handler=_category_map,
+    ))
+
+    def _actionability_route(input: list[Message]) -> list[Message]:
+        posts = input[0].parts[0].content
+        export_types.ensure_seeded()
+        posts = actionability.annotate_posts(posts, export_types.load_current())
+        return [Message(role="agent/actionability-router", parts=[
+            MessagePart(content=posts, content_type="application/json"),
+        ])]
+
+    coordinator.register(AgentManifest(
+        name="actionability-router",
+        description="Detects music/location/recipe (and any later-promoted emergent type) intent on "
+                    "posts, heuristically reusing InstaGone's own key_facts/caption extraction, so "
+                    "exporter.py can render type-specific local artifacts — no external API calls.",
+        handler=_actionability_route,
+    ))
+
+    def _export_type_evolve(input: list[Message]) -> list[Message]:
+        posts = input[0].parts[0].content  # full pass, not pre-filtered — see evolve()'s docstring
+        result = export_type_evolver.evolve(posts)
+        return [Message(role="agent/export-type-evolver", parts=[
+            MessagePart(content=result, content_type="application/json"),
+        ])]
+
+    coordinator.register(AgentManifest(
+        name="export-type-evolver",
+        description="Detects a genuine recurring cluster among actionable posts that don't match any "
+                    "current export type, checks it isn't already covered, grounds it against VectorAI "
+                    "DB's own local memory, and auto-promotes a new versioned emergent export type if warranted.",
+        handler=_export_type_evolve,
     ))
 
     return coordinator
