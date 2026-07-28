@@ -30,6 +30,20 @@ def test_detect_entity_type_location():
     assert actionability.detect_entity_type(_find("hiking trails and outdoor destinations")) == "location"
 
 
+def test_detect_entity_type_restaurant_review_is_location_not_recipe():
+    """Regression: a restaurant review lands in InstaGone's 'food and cooking'
+    category (matching the recipe keywords) but is a place to visit, not
+    something to cook — found via a real end-to-end run producing an
+    empty-ingredients recipe card for 'Yakitori Edomasa'."""
+    assert actionability.detect_entity_type(_find("restaurant review")) == "location"
+
+
+def test_detect_entity_type_restaurant_with_cultural_significance_is_location():
+    assert actionability.detect_entity_type(
+        _find("Japanese restaurant with cultural and cinematic significance")
+    ) == "location"
+
+
 def test_detect_entity_type_none_for_unrelated_category():
     post = {"category": "personal finance and investing", "subcategory": "budgeting tips", "hashtags": []}
     assert actionability.detect_entity_type(post) is None

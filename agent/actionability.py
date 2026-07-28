@@ -48,6 +48,12 @@ def _haystack(post: dict) -> str:
 
 def _builtin_entity_type(post: dict) -> str | None:
     haystack = _haystack(post)
+    # A restaurant review lands in InstaGone's "food and cooking" category (matching
+    # _RECIPE_KEYWORDS below) but is a place to visit, not something to cook — checked first
+    # so it doesn't get bucketed as a recipe card with an empty ingredients list. Found via a
+    # real end-to-end run against fixtures/demo_export.json (Yakitori Edomasa, Gonpachi).
+    if "restaurant" in haystack:
+        return "location"
     if any(k in haystack for k in _RECIPE_KEYWORDS):
         return "recipe"
     if any(k in haystack for k in _MUSIC_KEYWORDS):
