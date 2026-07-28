@@ -89,14 +89,13 @@ own merits, not just as a decoupling exercise.
 
 ### The actual gap
 
-Two enrichment mechanisms exist and produce real data, but neither is visible anywhere a person
-would look:
+Two enrichment mechanisms exist and produce real data, but only one of them is visible anywhere
+a person would look:
 
 - **Tags** (`agent/tagger.py`, `_tag_worker.py`) — 3-6 concrete keywords per item, generated
-  once a plan resolves. Stored on the item (`item["tags"]`). Rendered in `cited.md`'s markdown
-  (`tags_suffix` in `publisher.py`) — but `webui.py`'s dashboard template never reads `item.tags`
-  anywhere. A person using the web UI, which is the primary interface per `DEMO.md`, cannot see
-  a single tag their own items were given.
+  once a plan resolves. Stored on the item (`item["tags"]`). ✅ Now rendered in both `cited.md`
+  (`tags_suffix` in `publisher.py`) and `webui.py`'s dashboard (chip badges under the action
+  line, `webui.py`'s plan-card template) — shipped in `cecf752`, ahead of this doc catching up.
 - **Reassignment history** (`agent/reevaluator.py`) — when a rejected item gets moved to a
   better-fitting category, the move is logged (`session_log`'s `plan_reevaluated` event carries
   `{"reassigned": [{"href", "to", "score"}, ...]}`) but that's a write-only audit trail. The item
@@ -108,18 +107,18 @@ would look:
   something the product should require of anyone.
 
 Put simply: the pipeline has a real, evolving audit trail of every decision it makes about an
-item, and none of it survives past a JSONL line nobody is meant to read.
+item, and most of it still doesn't survive past a JSONL line nobody is meant to read.
 
 ### What to build
 
-1. **Surface tags in the dashboard, first** — the cheapest possible fix, no data model change
-   needed. `item.tags` already exists; the plan-card template just needs to render it (a small
-   chip list under the action line, matching what `cited.md` already does in markdown).
-2. **Give each item a real `history` field**, appended to (never overwritten) at each enrichment
-   event: `{"event": "tagged" | "reassigned" | "orphaned", "at": <timestamp>, "from_plan":
-   <id|null>, "score": <float|null>, "reason": <str|null>}`. `reevaluator.py` is the one place
-   that needs to write this — `_upsert_into()` currently strips context when moving an item; it
-   should instead carry a `history` entry forward describing the move that just happened.
+1. ✅ **Surface tags in the dashboard — DONE.** `item.tags` renders as a small chip list under
+   the action line in `webui.py`, matching what `cited.md` already did in markdown.
+2. 🚧 **Give each item a real `history` field** — in progress. Appended to (never overwritten)
+   at each enrichment event: `{"event": "tagged" | "reassigned" | "orphaned", "at": <timestamp>,
+   "from_plan": <id|null>, "score": <float|null>, "reason": <str|null>}`. `reevaluator.py` is the
+   one place that writes this — `_upsert_into()`/`_strip_transient()` used to strip context when
+   moving an item; they now carry a `history` entry forward describing the move that just
+   happened.
 3. **An item detail view**, not just a bigger card — a dashboard route (`/item/<href>` or an
    expandable row) showing: current tags, full `history` timeline, the taxonomy evidence if this
    item was ever part of a cluster that promoted a category, and the VectorAI DB recall hits that
@@ -198,10 +197,12 @@ notice the pattern and no way to act on it without the learning-plan structuring
 ## Sequencing
 
 **§1 shipped out of order** relative to the original plan below (it was tackled before §2), which
-turned out fine — it was self-contained and didn't depend on §2's UI work landing first. **§2
-next** — cheapest of what's left, no design risk, and makes every other change in this roadmap
-(including §1's local grounding, now live, and §3's profile) something a person can actually
-*see*, rather than another thing that only shows up in a JSONL file. **§3 last**, deliberately —
+turned out fine — it was self-contained and didn't depend on §2's UI work landing first. **§2 is
+in progress** — cheapest of what's left, no design risk, and makes every other change in this
+roadmap (including §1's local grounding, now live, and §3's profile) something a person can
+actually *see*, rather than another thing that only shows up in a JSONL file. Tags (2.1) are
+already live; the `history` field (2.2) is being built next, then the item detail view (2.3) and
+taxonomy view (2.4). **§3 last**, deliberately —
 it's the most valuable direction long-term but also the least scoped right now (the
 self-profile's data shape, the learning-plan ordering logic, and §1's still-open
 external-grounding question all need real design decisions before implementation starts), and

@@ -7,6 +7,23 @@ feedback loop, not downloading/transcribing/classifying raw Instagram media itse
 architecture, honest real-vs-stub breakdown of every component: **[RUNBOOK.md](RUNBOOK.md)**.
 Where this goes next: **[ROADMAP.md](ROADMAP.md)**.
 
+## Quickstart — web dashboard
+
+```bash
+docker compose up -d              # starts VectorAI DB (skip if already running: docker compose ps)
+./venv/bin/python webui.py         # localhost-only, http://127.0.0.1:5000
+```
+
+That's it if `venv/` already exists. From scratch:
+
+```bash
+python3 -m venv venv
+./venv/bin/pip install -r requirements.txt mlx-lm torch transformers
+```
+
+Open `http://127.0.0.1:5000` — upload a drop file, trigger a pass, give per-item feedback, and
+read `cited.md`, all from the browser. Full walkthrough: **[docs/DEMO.md](docs/DEMO.md)** §6.
+
 ## Stack
 
 - **Python 3**, one shared `venv/`

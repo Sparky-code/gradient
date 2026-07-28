@@ -20,6 +20,8 @@ rather than holding a stale snapshot across the whole slow computation — see
 store.py's module docstring for the data-loss bug this design avoids.
 """
 
+from datetime import datetime, timezone
+
 from agent import cancellation, exporter, planner, publisher, session_log, store, taxonomy, taxonomy_evolver, tagger
 from agent.adapters import vectorai
 
@@ -28,6 +30,20 @@ REASSIGN_MIN_SCORE = vectorai.ANCHOR_REUSE_SCORE  # same "is this genuinely the 
 
 def _item_text(item: dict) -> str:
     return " ".join([item.get("subcategory") or "", item.get("action") or ""] + item.get("tags", [])).strip()
+
+
+def _append_history(item: dict, event: str, *, from_plan: str | None = None,
+                     score: float | None = None, reason: str | None = None) -> None:
+    """Appends one entry to `item["history"]` in place — never overwritten, so an
+    item's history is a full timeline across every enrichment pass it's been
+    through (ROADMAP.md §2.2), not just its most recent move."""
+    item.setdefault("history", []).append({
+        "event": event,
+        "at": datetime.now(timezone.utc).isoformat(),
+        "from_plan": from_plan,
+        "score": score,
+        "reason": reason,
+    })
 
 
 def _all_items_with_category(plans: dict[str, dict]) -> list[dict]:
@@ -40,7 +56,9 @@ def _all_items_with_category(plans: dict[str, dict]) -> list[dict]:
 def _strip_transient(item: dict) -> dict:
     """Drop fields that shouldn't carry over when an item moves to a new plan —
     `status`/`category` are relative to where it *was*, not where it's landing
-    (a reassigned item starts fresh as "pending" in its new home)."""
+    (a reassigned item starts fresh as "pending" in its new home). `history` is
+    deliberately not in this drop list — callers append the move's own history
+    entry via `_append_history()` before this runs, so it carries forward."""
     return {k: v for k, v in item.items() if k not in ("category", "status")}
 
 
@@ -80,6 +98,7 @@ def reevaluate_plan(plan_id: str) -> dict:
         tags = tagger.generate_tags(untagged)
         for item, item_tags in zip(untagged, tags):
             item["tags"] = item_tags
+            _append_history(item, "tagged")
 
     if cancellation.is_cancelled():
         # Nothing committed — the plan stays exactly as it was (still
@@ -120,6 +139,10 @@ def reevaluate_plan(plan_id: str) -> dict:
             if match:
                 reassignments.append((item, match["name"], match["score"]))
                 result["reassigned"].append({"href": item.get("href"), "to": match["name"], "score": match["score"]})
+                _append_history(
+                    item, "reassigned", from_plan=plan_interest, score=match["score"],
+                    reason=f"matched existing category {match['name']!r}",
+                )
             else:
                 orphans.append(item)
 
@@ -138,6 +161,12 @@ def reevaluate_plan(plan_id: str) -> dict:
             result["taxonomy_promoted"] = promoted_category
             if not promoted_category:
                 result["still_unassigned"] = len(orphans)
+            orphan_reason = (
+                f"no matching category — clustered into new category {promoted_category!r}"
+                if promoted_category else "no matching category — filed as \"other\""
+            )
+            for item in orphans:
+                _append_history(item, "orphaned", from_plan=plan_interest, reason=orphan_reason)
 
     # ---- fast final commit: re-read fresh, apply the computed deltas, save ----
 
