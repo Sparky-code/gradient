@@ -26,6 +26,7 @@ import tempfile
 from pathlib import Path
 
 from agent import cancellation, config, session_log, taxonomy
+from agent.adapters import lora as lora_adapter
 from agent.adapters import vectorai
 
 CLUSTER_MIN_SIZE = 3  # itself + at least 2 real neighbors — mirrors Pioneer's
@@ -43,6 +44,7 @@ def _propose_name(cluster_posts: list[dict], citations: list[str], existing_cate
         in_path.write_text(json.dumps({
             "cluster_posts": cluster_posts, "citations": citations,
             "existing_categories": existing_categories,
+            "adapter_path": lora_adapter.current_adapter_path(),
         }))
         try:
             cancellation.run_cancellable(

@@ -29,7 +29,7 @@ def main() -> None:
     )
 
     from mlx_lm import generate, load
-    model, tokenizer = load(MODEL_ID)
+    model, tokenizer = load(MODEL_ID, adapter_path=data.get("adapter_path"))
 
     posts_block = "\n".join(
         f'- subcategory="{p.get("subcategory")}" action="{p.get("action")}"' for p in cluster_posts

@@ -37,7 +37,7 @@ def main() -> None:
     posts, policy = data["posts"], data["policy"]
 
     from mlx_lm import generate, load
-    model, tokenizer = load(MODEL_ID)
+    model, tokenizer = load(MODEL_ID, adapter_path=data.get("adapter_path"))
 
     exemplar_block = build_exemplar_block(policy["exemplars"])
     results = []

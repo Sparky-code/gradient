@@ -24,12 +24,19 @@ promotion above: that's still what changes classification behavior, runs
 unconditionally, and isn't gated on the real API call succeeding. See
 pioneer_api.py's own docstring for exactly how far the real call gets before
 this account's billing wall stops it.
+
+`maybe_retrain()` also calls `agent/adapters/lora.py`'s `train_and_promote()`
+every pass — a real *local* LoRA retrain, replacing what pioneer_api.py's
+hosted path would have done if it weren't billing-walled. Same additive
+contract: never blocks or replaces the local exemplar promotion above, never
+raises past this function.
 """
 
 import json
 from datetime import datetime, timezone
 
 from agent import config, policy
+from agent.adapters import lora as lora_adapter
 from agent.adapters import pioneer_api
 
 RETRAIN_BATCH_SIZE = 5   # collect this many feedback examples before a retrain pass
@@ -92,6 +99,16 @@ def maybe_retrain() -> dict | None:
         "policy_exemplar_count": len(exemplars),
     }
 
+    # Real local LoRA retrain — additive, never a replacement for the local
+    # exemplar promotion above. Any failure here (LoRA_Local/uv missing,
+    # training error, timeout) must never break the real promotion that
+    # already happened.
+    try:
+        local_lora = lora_adapter.train_and_promote(queue)
+    except Exception as e:  # noqa: BLE001 — deliberate: a local retrain attempt must degrade, not crash the pass
+        local_lora = {"attempted": True, "stage": "exception", "ok": False, "detail": str(e)}
+    report["local_lora"] = local_lora
+
     # Real Pioneer API attempt — additive, never a replacement for the local
     # promotion above (that's the artifact that actually changes classification
     # behavior, see policy.py). Any failure here — network, schema, billing —
@@ -104,19 +121,28 @@ def maybe_retrain() -> dict | None:
         real = {"attempted": True, "stage": "exception", "ok": False, "detail": str(e)}
     report["pioneer_api"] = real
 
+    if local_lora.get("ok"):
+        lora_note = f"local LoRA retrain promoted adapter v{local_lora['promoted_version']} — see data/state/adapters/current.json"
+    elif local_lora.get("attempted"):
+        lora_note = f"local LoRA retrain attempted and failed at stage '{local_lora.get('stage')}': {local_lora.get('detail')}"
+    else:
+        lora_note = f"local LoRA retrain skipped: {local_lora.get('reason')}"
+
     if not real.get("attempted"):
-        report["note"] = ("simulated retrain — no Pioneer API key configured; real call would POST to "
-                           "/felix/training-jobs. The promoted artifact is real: see data/state/policy/current.json")
+        report["note"] = (f"simulated retrain — no Pioneer API key configured; real call would POST to "
+                           f"/felix/training-jobs. The promoted artifact is real: see data/state/policy/current.json. "
+                           f"{lora_note}")
     elif real.get("ok"):
         report["note"] = (
             f"local reimplementation promoted the real policy artifact above (unchanged); "
-            f"also submitted a real Pioneer training job — id={real.get('job_id')}, status={real.get('status')}"
+            f"also submitted a real Pioneer training job — id={real.get('job_id')}, status={real.get('status')}. "
+            f"{lora_note}"
         )
     else:
         report["note"] = (
             f"local reimplementation promoted the real policy artifact above (unchanged); "
             f"also attempted Pioneer's real API and stopped at stage '{real.get('stage')}' "
-            f"(http {real.get('http_status')}): {real.get('detail')}"
+            f"(http {real.get('http_status')}): {real.get('detail')}. {lora_note}"
         )
 
     config.ensure_dirs()

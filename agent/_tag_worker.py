@@ -20,10 +20,11 @@ MODEL_ID = "mlx-community/Qwen3-30B-A3B-4bit"
 
 def main() -> None:
     in_path, out_path = sys.argv[1], sys.argv[2]
-    items = json.loads(Path(in_path).read_text())["items"]
+    data = json.loads(Path(in_path).read_text())
+    items = data["items"]
 
     from mlx_lm import generate, load
-    model, tokenizer = load(MODEL_ID)
+    model, tokenizer = load(MODEL_ID, adapter_path=data.get("adapter_path"))
 
     results = []
     for item in items:

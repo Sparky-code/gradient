@@ -11,6 +11,7 @@ import tempfile
 from pathlib import Path
 
 from agent import cancellation, config
+from agent.adapters import lora as lora_adapter
 
 VENV_PYTHON = config.ROOT / "venv" / "bin" / "python"
 WORKER = Path(__file__).parent / "_tag_worker.py"
@@ -25,7 +26,7 @@ def generate_tags(items: list[dict]) -> list[list[str]]:
         return [[] for _ in items]
     with tempfile.TemporaryDirectory() as tmp:
         in_path, out_path = Path(tmp) / "in.json", Path(tmp) / "out.json"
-        in_path.write_text(json.dumps({"items": items}))
+        in_path.write_text(json.dumps({"items": items, "adapter_path": lora_adapter.current_adapter_path()}))
         try:
             cancellation.run_cancellable(
                 [str(VENV_PYTHON), str(WORKER), str(in_path), str(out_path)],

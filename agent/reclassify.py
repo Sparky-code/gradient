@@ -13,6 +13,7 @@ import tempfile
 from pathlib import Path
 
 from agent import cancellation, config
+from agent.adapters import lora as lora_adapter
 
 VENV_PYTHON = config.ROOT / "venv" / "bin" / "python"
 WORKER = Path(__file__).parent / "_reclassify_worker.py"
@@ -31,7 +32,9 @@ def apply_policy(posts: list[dict], policy: dict) -> tuple[list[dict], list[dict
 
     with tempfile.TemporaryDirectory() as tmp:
         in_path, out_path = Path(tmp) / "in.json", Path(tmp) / "out.json"
-        in_path.write_text(json.dumps({"posts": posts, "policy": policy}))
+        in_path.write_text(json.dumps({
+            "posts": posts, "policy": policy, "adapter_path": lora_adapter.current_adapter_path(),
+        }))
         try:
             cancellation.run_cancellable(
                 [str(VENV_PYTHON), str(WORKER), str(in_path), str(out_path)],
