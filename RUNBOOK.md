@@ -188,6 +188,40 @@ reference; it was removed once `fixtures/demo_export.json` became the one real, 
 sample — no code path ever read it, so nothing else changes.
 The live input directory is `data/drop/`.
 
+**Upstream data-quality wishlist for InstaGone.** InstaGone is a separate, sibling tool that can
+evolve in parallel with this agent — the following would materially improve what this repo's
+category-mapping (`agent/adapters/vectorai.py`'s `top_k_anchors_many()`) and actionability
+pipeline (`agent/actionability.py`, `agent/export_type_evolver.py`) can build on top of, without
+this repo needing to reverse-engineer them via regex:
+
+1. **Emit structured entities directly**, e.g. `extracted_entities: {music_tracks: [{artist,
+   track}], place: {name, lat, lng}, recipe: {name, ingredients: [...]}}`. InstaGone already has
+   the OCR/caption text in hand at classification time — asking it to structure the entities it
+   recognizes removes an entire fragile regex-extraction layer from this repo
+   (`agent/actionability.py`'s hand-written extractors exist only because this data isn't
+   structured today).
+2. **Dedicated `lat`/`lng` numeric fields** when a location is detected, instead of coordinates
+   appearing as a substring inside `caption_clean`/`ocr_text` (today extracted here via a
+   GPS-string regex over free text — fragile).
+3. **A documented, stable rule for `suggested_collection`** — the fixture data shows it sometimes
+   matches `category`, sometimes doesn't, with no discoverable rule. Either document what
+   determines it or fold it into one authoritative signal. (This repo now carries it through as
+   read-only provenance — `item["source_collection"]` in `agent/planner.py` — but never as a
+   grouping key, since its semantics relative to `category` aren't pinned down upstream.)
+4. **A `confidence` score alongside `category`/`actionable`**, so this repo's vector
+   category-mapping and export-type evolution can weight InstaGone's own certainty instead of
+   treating every classification as equally reliable.
+5. **A stable post identity** (`media_id`/content hash) distinct from `href` — Instagram
+   permalinks can change/expire, and this repo currently keys everything off `href` (dedup in
+   `store.merge_plans()`, VectorAI point IDs).
+6. **Expose InstaGone's own classification embedding (or model/version)**, if one already exists
+   internally — would let this repo evaluate reusing it instead of re-embedding everything via
+   `nomic-embed-text-v1.5`, avoiding duplicate compute across the two tools.
+
+None of this blocks anything currently implemented here — it's written down so the two projects'
+evolution stays coordinated rather than this repo permanently working around gaps that would be
+cheaper to close upstream.
+
 ### 3. Planning (`agent/planner.py`)
 
 Groups posts by `category` into one "plan" per interest, reusing InstaGone's existing
