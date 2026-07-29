@@ -113,18 +113,18 @@ item, and most of it still doesn't survive past a JSONL line nobody is meant to 
 
 1. ✅ **Surface tags in the dashboard — DONE.** `item.tags` renders as a small chip list under
    the action line in `webui.py`, matching what `cited.md` already did in markdown.
-2. 🚧 **Give each item a real `history` field** — in progress. Appended to (never overwritten)
-   at each enrichment event: `{"event": "tagged" | "reassigned" | "orphaned", "at": <timestamp>,
-   "from_plan": <id|null>, "score": <float|null>, "reason": <str|null>}`. `reevaluator.py` is the
-   one place that writes this — `_upsert_into()`/`_strip_transient()` used to strip context when
-   moving an item; they now carry a `history` entry forward describing the move that just
-   happened.
-3. **An item detail view**, not just a bigger card — a dashboard route (`/item/<href>` or an
-   expandable row) showing: current tags, full `history` timeline, the taxonomy evidence if this
-   item was ever part of a cluster that promoted a category, and the VectorAI DB recall hits that
-   were surfaced for its plan. This is the natural place for the local-grounding citations from
-   §1 to live too, once that's built — "here's what grounded this item's plan" belongs next to
-   "here's this item's own history," not buried in a collapsed markdown section.
+2. ✅ **Give each item a real `history` field — DONE.** Appended to (never overwritten) at each
+   enrichment event: `{"event": "tagged" | "reassigned" | "orphaned", "at": <timestamp>,
+   "from_plan": <id|null>, "score": <float|null>, "reason": <str|null>}`. `reevaluator.py` writes
+   this — `_upsert_into()`/`_strip_transient()` used to strip context when moving an item; they now
+   carry a `history` entry forward describing the move that just happened.
+3. ✅ **An item detail view — DONE.** `GET /item/<href>` in `webui.py` (linked from each item row's
+   new "details" link) shows: current tags, the full `history` timeline, taxonomy promotion
+   evidence (only when this exact item's href is in the promoted category's own `cluster_hrefs` —
+   not just "this item currently sits in a category that was ever promoted"), and this item's
+   plan's grounding citations + VectorAI DB recall hits — both already live from §1, now surfaced
+   next to the item's own history instead of only in `cited.md`. Looked up by `href` (not
+   `plan_id`) so the permalink survives a reassignment.
 4. **A taxonomy view** — separate from any one item: `taxonomy.load_current()` already has every
    promoted category's version history and promotion evidence; there's no UI for it at all today,
    only `data/state/taxonomy/current.json` and `vN.json` files. A person should be able to see
@@ -200,9 +200,9 @@ notice the pattern and no way to act on it without the learning-plan structuring
 turned out fine — it was self-contained and didn't depend on §2's UI work landing first. **§2 is
 in progress** — cheapest of what's left, no design risk, and makes every other change in this
 roadmap (including §1's local grounding, now live, and §3's profile) something a person can
-actually *see*, rather than another thing that only shows up in a JSONL file. Tags (2.1) are
-already live; the `history` field (2.2) is being built next, then the item detail view (2.3) and
-taxonomy view (2.4). **§3 last**, deliberately —
+actually *see*, rather than another thing that only shows up in a JSONL file. Tags (2.1),
+`history` (2.2), and the item detail view (2.3) are all live; only the taxonomy view (2.4) is
+left. **§3 last**, deliberately —
 it's the most valuable direction long-term but also the least scoped right now (the
 self-profile's data shape, the learning-plan ordering logic, and §1's still-open
 external-grounding question all need real design decisions before implementation starts), and

@@ -8,7 +8,7 @@ the state-transition logic worth exercising directly.
 
 import json
 
-from agent import cancellation, config, store
+from agent import cancellation, config, store, taxonomy
 
 from tests.helpers import make_item, make_plan, wait_until, write_plans
 
@@ -370,3 +370,86 @@ def test_download_export_serves_file(client, isolated_env):
 def test_download_export_missing_file_returns_404(client, isolated_env):
     resp = client.get("/exports/no-such-file.csv")
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /item/<href>
+# ---------------------------------------------------------------------------
+
+def test_item_detail_shows_tags_and_history(client, isolated_env):
+    item = make_item(href="https://www.instagram.com/reel/AAA111/", subcategory="hiking trails", tags=["gear", "trail"])
+    item["history"] = [{
+        "event": "tagged", "at": "2026-01-01T00:00:00+00:00",
+        "from_plan": None, "score": None, "reason": None,
+    }]
+    write_plans(make_plan(plan_id="plan-x", interest="outdoors", items=[item]))
+
+    resp = client.get("/item/https://www.instagram.com/reel/AAA111/")
+    assert resp.status_code == 200
+    assert b"hiking trails" in resp.data
+    assert b"gear" in resp.data
+    assert b"tagged" in resp.data
+
+
+def test_item_detail_no_history_shows_empty_state(client, isolated_env):
+    write_plans(make_plan(plan_id="plan-x", items=[make_item(href="https://example.com/a")]))
+    resp = client.get("/item/https://example.com/a")
+    assert resp.status_code == 200
+    assert b"No history yet" in resp.data
+
+
+def test_item_detail_unknown_href_returns_404(client, isolated_env):
+    resp = client.get("/item/https://example.com/does-not-exist")
+    assert resp.status_code == 404
+
+
+def test_item_detail_shows_taxonomy_evidence_when_href_in_cluster(client, isolated_env):
+    href = "https://example.com/a"
+    write_plans(make_plan(plan_id="plan-x", interest="new hobby", items=[make_item(href=href)]))
+    taxonomy.promote("new hobby", evidence={
+        "cluster_size": 3, "cluster_hrefs": [href, "https://example.com/b"],
+        "description": "a genuinely new cluster of posts", "grounding_citations": ["citation one"],
+        "reuse_check_cleared": True,
+    })
+
+    resp = client.get(f"/item/{href}")
+    assert resp.status_code == 200
+    assert b"new hobby" in resp.data
+    assert b"a genuinely new cluster of posts" in resp.data
+    assert b"citation one" in resp.data
+
+
+def test_item_detail_no_taxonomy_evidence_when_href_not_in_any_cluster(client, isolated_env):
+    href = "https://example.com/a"
+    write_plans(make_plan(plan_id="plan-x", interest="new hobby", items=[make_item(href=href)]))
+    taxonomy.promote("new hobby", evidence={
+        "cluster_size": 2, "cluster_hrefs": ["https://example.com/other-item"],
+        "description": "unrelated cluster", "grounding_citations": [], "reuse_check_cleared": True,
+    })
+
+    resp = client.get(f"/item/{href}")
+    assert resp.status_code == 200
+    assert b"wasn't part of a cluster" in resp.data
+
+
+def test_item_detail_shows_plan_grounding_and_recall(client, isolated_env):
+    href = "https://example.com/a"
+    plan = make_plan(plan_id="plan-x", items=[make_item(href=href)])
+    plan["grounding"] = {"grounded": True, "citations": ["other saved post about this"], "source": "vectorai"}
+    plan["memory"] = {"recalled": True, "memories": [
+        {"status": "accepted", "score": 0.87, "subcategory": "hiking trails", "action": "go hiking"},
+    ]}
+    write_plans(plan)
+
+    resp = client.get(f"/item/{href}")
+    assert resp.status_code == 200
+    assert b"other saved post about this" in resp.data
+    assert b"0.87" in resp.data
+    assert b"go hiking" in resp.data
+
+
+def test_dashboard_item_row_links_to_item_detail(client, isolated_env):
+    write_plans(make_plan(items=[make_item(href="https://example.com/a")]))
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b'/item/https://example.com/a' in resp.data

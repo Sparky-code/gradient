@@ -1,52 +1,6 @@
 # cited.md
 
-_Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signal post(s) filtered out._
-
-## ⏳ food and cooking — `plan-food-and-cooking` (pending)
-
-- ✅ **high-protein frozen burrito recipe** (how_to, accepted): Follow the steps to make high-protein frozen burritos using the provided recipe and reheat instructions.
-  - Chicken Tikka Masala Burritos
-  - 480 calories per burrito
-  - 40g protein per burrito
-  - Makes 11 burritos
-  - Marinade includes yogurt, garlic, ginger, lemon juice, and spice mix
-  - Sauce includes onions, garlic, ginger, tomato paste, and spices
-  - Cooked in bone broth for extra protein
-  - Reheat instructions: microwave and air fry
-  - source: <https://www.instagram.com/reel/C7ul8ZhJjbZ/>
-- ⏳ **restaurant review** (wishlist_place, pending): Visit Yakitori Edomasa in San Francisco's Japantown to try authentic yakitori and the wasabi chicken tender.
-  - Yakitori Edomasa - San Francisco, CA
-  - Chicken Paitan soup
-  - Chicken tender with wasabi
-  - Edomasa tasting menu ($30)
-  - source: <https://www.instagram.com/reel/C0QLw_pRwh_/>
-- ⏳ **recipe for invisible apple cake** (how_to, pending): Follow the recipe to make the Invisible Apple Cake with thinly sliced apples and custard-like batter.
-  - Invisible Apple Cake (Gâteau Invisible Aux Pommes) is a French dessert made with thinly sliced apples and a custard-like batter.
-  - The recipe includes 1 cup all purpose flour, 1 tsp baking powder, 1/2 tsp cinnamon, 1/4 tsp nutmeg, 1/4 tsp ginger, Pinch of cloves, 1/4 tsp salt, 2 tbsp melted butter, 1/2 cup whole milk, 1 tsp vanilla extract, 3 large eggs, 2/3 cup granulated sugar, and 2 lb apples.
-  - The cake is baked at 375°F for ~75 minutes.
-  - It can be served with powdered sugar, whipped cream, ice cream, or caramel sauce.
-  - The user offers to send cut-proof gloves and a mandoline if someone comments 'link'.
-  - source: <https://www.instagram.com/reel/DAV_OYZucrD/>
-- ⏳ **Japanese restaurant with cultural and cinematic significance** (wishlist_place, pending): Visit Gonpachi Nishi-Azabu to experience a unique Japanese dining location with cultural and cinematic history.
-  - Gonpachi Nishi-Azabu is a famous Japanese restaurant
-  - It was the model for a historic dinner meeting between George W. Bush and Koizumi
-  - It was featured in Quentin Tarantino's 'Kill Bill'
-  - It serves handmade soba noodles, kushiyaki skewers, and tempura
-  - Vegan and halal courses are available with reservations
-  - Location: 1-13-11 Nishiazabu, Minato-ku, Tokyo 106-0031
-  - Hours: 11:30-27:30 (lunch until 15:00)
-  - Near Roppongi, Nogizaka, and Hiroo Stations
-  - source: <https://www.instagram.com/reel/C1JBjNevPJO/>
-  - _Grounded citations (other posts you saved):_
-    - cooking technique tutorial: Reference for next time you cook fish — pick a method (salt, sugar-salt, kombujime, or gravlax) based on the fish and occasion.
-    - recipe / plated dish showcase: Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link.
-    - easy weeknight dinner recipe: Cook a simple 20-minute weeknight dinner using pantry staples like pasta, garlic, and olive oil.
-  - 🧠 _VectorAI DB recall — similar past posts:_
-    - ⏳ `pending` (0.668): cooking technique tutorial — Reference for next time you cook fish — pick a method (salt, sugar-salt, kombujime, or gravlax) based on the fish and occasion.
-    - ⏳ `pending` (0.667): recipe / plated dish showcase — Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link.
-    - ⏳ `pending` (0.631): easy weeknight dinner recipe — Cook a simple 20-minute weeknight dinner using pantry staples like pasta, garlic, and olive oil.
-
-  Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-food-and-cooking <accept|reject|share|invite>`
+_Generated 2026-07-28T19:38:26.128571+00:00 — 11 interest plan(s), 0 low-signal post(s) filtered out._
 
 ## ✅ travel and adventure — `plan-travel-and-adventure` (accepted)
 
@@ -101,6 +55,45 @@ _Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signa
 
   Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-travel-and-adventure <accept|reject|share|invite>`
 
+## ✅ food and cooking — `plan-food-and-cooking` (accepted)
+
+- ✅ **high-protein frozen burrito recipe** (how_to, accepted) _[chicken tikka masala, yogurt marinade, bone broth, air fry reheat, microwave reheat, tomato paste sauce]_: Follow the steps to make high-protein frozen burritos using the provided recipe and reheat instructions.
+  - Chicken Tikka Masala Burritos
+  - 480 calories per burrito
+  - 40g protein per burrito
+  - Makes 11 burritos
+  - Marinade includes yogurt, garlic, ginger, lemon juice, and spice mix
+  - Sauce includes onions, garlic, ginger, tomato paste, and spices
+  - Cooked in bone broth for extra protein
+  - Reheat instructions: microwave and air fry
+  - source: <https://www.instagram.com/reel/C7ul8ZhJjbZ/>
+- ✅ **restaurant review** (wishlist_place, accepted) _[yakitori edomasa, san francisco japantown, chicken paitan soup, wasabi chicken tender, edomasa tasting menu]_: Visit Yakitori Edomasa in San Francisco's Japantown to try authentic yakitori and the wasabi chicken tender.
+  - Yakitori Edomasa - San Francisco, CA
+  - Chicken Paitan soup
+  - Chicken tender with wasabi
+  - Edomasa tasting menu ($30)
+  - source: <https://www.instagram.com/reel/C0QLw_pRwh_/>
+- ✅ **Japanese restaurant with cultural and cinematic significance** (wishlist_place, accepted) _[gonpachi nishi-azabu, soba noodles, kushiyaki skewers, tempura, kill bill film location, vegan halal dining]_: Visit Gonpachi Nishi-Azabu to experience a unique Japanese dining location with cultural and cinematic history.
+  - Gonpachi Nishi-Azabu is a famous Japanese restaurant
+  - It was the model for a historic dinner meeting between George W. Bush and Koizumi
+  - It was featured in Quentin Tarantino's 'Kill Bill'
+  - It serves handmade soba noodles, kushiyaki skewers, and tempura
+  - Vegan and halal courses are available with reservations
+  - Location: 1-13-11 Nishiazabu, Minato-ku, Tokyo 106-0031
+  - Hours: 11:30-27:30 (lunch until 15:00)
+  - Near Roppongi, Nogizaka, and Hiroo Stations
+  - source: <https://www.instagram.com/reel/C1JBjNevPJO/>
+  - _Grounded citations (other posts you saved):_
+    - cooking technique tutorial: Reference for next time you cook fish — pick a method (salt, sugar-salt, kombujime, or gravlax) based on the fish and occasion.
+    - recipe / plated dish showcase: Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link.
+    - easy weeknight dinner recipe: Cook a simple 20-minute weeknight dinner using pantry staples like pasta, garlic, and olive oil.
+  - 🧠 _VectorAI DB recall — similar past posts:_
+    - ⏳ `pending` (0.668): cooking technique tutorial — Reference for next time you cook fish — pick a method (salt, sugar-salt, kombujime, or gravlax) based on the fish and occasion.
+    - ⏳ `pending` (0.667): recipe / plated dish showcase — Try the crispy rice paper egg & salmon tartare recipe — full recipe is on their website via the bio link.
+    - ⏳ `pending` (0.631): easy weeknight dinner recipe — Cook a simple 20-minute weeknight dinner using pantry staples like pasta, garlic, and olive oil.
+
+  Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-food-and-cooking <accept|reject|share|invite>`
+
 ## ✅ personal finance and investing — `plan-personal-finance-and-investing` (accepted)
 
 - ✅ **wealth building strategies for families** (how_to, accepted): Use the strategies mentioned to build your own wealth through passive income, tax-efficient investing, and emergency savings.
@@ -130,9 +123,9 @@ _Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signa
 
   Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-personal-finance-and-investing <accept|reject|share|invite>`
 
-## ⏳ productivity and career — `plan-productivity-and-career` (pending)
+## ✅ productivity and career — `plan-productivity-and-career` (accepted)
 
-- ⏳ **career development and productivity tips** (how_to, pending): Implement the 8 weekly and monthly productivity and career development strategies listed in the post.
+- ✅ **career development and productivity tips** (how_to, accepted): Implement the 8 weekly and monthly productivity and career development strategies listed in the post.
   - 1. Your Weekly Wins Archive
   - 2. LinkedIn Thought Library
   - 3. The Monthly Mentor Coffee
@@ -143,7 +136,7 @@ _Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signa
   - 8. The Monthly Skill Sprint
   - Save this for January 1, 2026
   - source: <https://www.instagram.com/reel/DS5ETT_jY3M/>
-- ⏳ **remote job resources and advice** (tool_resource, pending): Use the job boards and resources mentioned to find remote job opportunities.
+- ✅ **remote job resources and advice** (tool_resource, accepted): Use the job boards and resources mentioned to find remote job opportunities.
   - #workfromanywhere
   - #remotework
   - #remotejobs
@@ -265,6 +258,25 @@ _Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signa
 
   Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-cultural-dining-experiences <accept|reject|share|invite>`
 
+## ⏳ other — `plan-other` (pending)
+
+- ⏳ **photo polymer stamp making** (how_to, pending) _[photo polymer plates, uv light exposure, transparency film, graphicclaystudio, stamp making tools, polymer printing]_: Follow the steps to make your own stamps using photo polymer printing plates and visit www.graphicclaystudio.com to purchase the materials.
+  - Photo polymer printing plates have a light sensitive emulsion that hardens when exposed to ultraviolet light.
+  - The design is printed onto a transparency and placed on top of the photo polymer plate.
+  - Exposure time varies depending on the light source (sunlight: 6-10 minutes, LED black light: ~1.5 minutes).
+  - The website www.graphicclaystudio.com sells the polymer used in the video.
+  - The account @graphic.clay.studio provides more information on making stamps.
+  - source: <https://www.instagram.com/reel/Cz_grmtg76s/>
+- ⏳ **recipe for invisible apple cake** (how_to, pending) _[thinly sliced apples, custard-like batter, all purpose flour, melted butter, whole milk, vanilla extract]_: Follow the recipe to make the Invisible Apple Cake with thinly sliced apples and custard-like batter.
+  - Invisible Apple Cake (Gâteau Invisible Aux Pommes) is a French dessert made with thinly sliced apples and a custard-like batter.
+  - The recipe includes 1 cup all purpose flour, 1 tsp baking powder, 1/2 tsp cinnamon, 1/4 tsp nutmeg, 1/4 tsp ginger, Pinch of cloves, 1/4 tsp salt, 2 tbsp melted butter, 1/2 cup whole milk, 1 tsp vanilla extract, 3 large eggs, 2/3 cup granulated sugar, and 2 lb apples.
+  - The cake is baked at 375°F for ~75 minutes.
+  - It can be served with powdered sugar, whipped cream, ice cream, or caramel sauce.
+  - The user offers to send cut-proof gloves and a mandoline if someone comments 'link'.
+  - source: <https://www.instagram.com/reel/DAV_OYZucrD/>
+
+  Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-other <accept|reject|share|invite>`
+
 ## ✅ art and design — `plan-art-and-design` (accepted)
 
 - ✅ **architectural design and structure** (wishlist_place, accepted): Consider visiting Kioi-Seido when it opens to the public, as it is an innovative architectural structure with no predefined function.
@@ -299,15 +311,3 @@ _Generated 2026-07-28T16:40:42.069225+00:00 — 11 interest plan(s), 0 low-signa
     - ⏳ `pending` (0.695): AI / coding education commentary — If genuinely interested in the concept, the real resource is Bruce Tate's book, not the bootcamp pitch (which is satire).
 
   Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-coding-and-software-tools <accept|reject|share|invite>`
-
-## ⏳ other — `plan-other` (pending)
-
-- ⏳ **photo polymer stamp making** (how_to, pending) _[photo polymer plates, uv light exposure, transparency film, graphicclaystudio, stamp making tools, polymer printing]_: Follow the steps to make your own stamps using photo polymer printing plates and visit www.graphicclaystudio.com to purchase the materials.
-  - Photo polymer printing plates have a light sensitive emulsion that hardens when exposed to ultraviolet light.
-  - The design is printed onto a transparency and placed on top of the photo polymer plate.
-  - Exposure time varies depending on the light source (sunlight: 6-10 minutes, LED black light: ~1.5 minutes).
-  - The website www.graphicclaystudio.com sells the polymer used in the video.
-  - The account @graphic.clay.studio provides more information on making stamps.
-  - source: <https://www.instagram.com/reel/Cz_grmtg76s/>
-
-  Respond per item from the dashboard (Accept/Reject), or bulk-decide the whole plan via CLI: `python main.py feedback plan-other <accept|reject|share|invite>`

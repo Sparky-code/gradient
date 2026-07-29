@@ -31,14 +31,19 @@ Routes:
   GET  /exports/<file>    download one generated export artifact (playlist.csv,
                       places.csv, a recipe card, shopping_list.md, or a
                       generic emergent-type file) — see agent/exporter.py
+  GET  /item/<href>       item detail — tags, full history timeline, taxonomy
+                      promotion evidence (if this item was ever part of a
+                      cluster that promoted a category), and this item's
+                      plan's grounding citations + VectorAI DB recall hits.
+                      See ROADMAP.md §2.3.
 """
 
 import json
 import threading
 
-from flask import Flask, redirect, render_template_string, request, send_from_directory, url_for
+from flask import Flask, abort, redirect, render_template_string, request, send_from_directory, url_for
 
-from agent import cancellation, config, exporter, feedback, loop, policy, store
+from agent import cancellation, config, exporter, feedback, loop, policy, store, taxonomy
 
 app = Flask(__name__)
 
@@ -83,6 +88,28 @@ def _session_log_tail(n: int = 15) -> list[dict]:
     for e in entries:
         e["extra"] = {k: v for k, v in e.items() if k not in ("logged_at", "event", "extra")}
     return entries
+
+
+def _find_item_by_href(href: str) -> tuple[dict | None, dict | None]:
+    """href, not plan_id, is the item's stable identity across a reassignment
+    (see agent/reevaluator.py) — a plan_id in the URL would go stale the
+    moment an item moves, so /item/<href> always does a fresh scan instead."""
+    for plan in store.load_plans().values():
+        for item in plan.get("items", []):
+            if item.get("href") == href:
+                return plan, item
+    return None, None
+
+
+def _taxonomy_evidence_for_href(href: str) -> dict | None:
+    """Only true if this exact item's href is in some promoted category's own
+    cluster_hrefs — not just "this item currently sits in a category that was
+    ever promoted", which would also be true of items that landed there later
+    for unrelated reasons."""
+    for entry in taxonomy.load_current().get("history", []):
+        if href in (entry.get("evidence") or {}).get("cluster_hrefs", []):
+            return entry
+    return None
 
 
 PAGE = """
@@ -231,6 +258,8 @@ PAGE = """
   .badge.entity-badge { background: var(--linked); }
   .badge.tag-badge { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
   .empty { color: var(--text-muted); font-style: italic; }
+  .item-detail-link { text-decoration: none; border-bottom: 1px dotted var(--text-muted); margin-left: .35rem; }
+  .item-detail-link:hover { color: var(--text); border-color: var(--text); }
 
   [data-tooltip] { position: relative; }
   [data-tooltip]:hover::after, [data-tooltip]:focus-visible::after {
@@ -515,6 +544,8 @@ PAGE = """
             <span class="badge small tag-badge">{{ tag }}</span>
             {% endfor %}
             <b>{{ item.subcategory }}</b> <span class="meta">({{ item.actionable }})</span>: {{ item.action }}
+            <a href="{{ url_for('item_detail', href=item.href) }}" class="meta item-detail-link"
+              data-tooltip="Full history, tags, taxonomy evidence, and grounding/recall for this item">details</a>
             {% if item.get('category_scores') %}
             <span class="info-icon" tabindex="0" aria-label="Related categories"
               data-tooltip="Vector category map: {% for m in item.category_scores %}{{ m.name }} ({{ m.score }}){{ ', ' if not loop.last }}{% endfor %}">i</span>
@@ -737,6 +768,150 @@ CITED_PAGE = """
 </html>
 """
 
+ITEM_PAGE = """
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ item.subcategory }} — item detail</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --surface: #ffffff; --border: #e3e5ea; --text: #1c1e21; --text-muted: #6b7280;
+    --pending: #d4a017; --accepted: #2f9e6e; --rejected: #d64545; --linked: #3b82f6;
+    --radius: 10px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --surface: #1d2025; --border: #2b2f36; --text: #e7e9ec; --text-muted: #9aa1ab; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); max-width: 760px; margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem; line-height: 1.5;
+  }
+  a { color: var(--linked); }
+  .back {
+    display: inline-block; margin-bottom: 1.25rem; text-decoration: none; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: .35rem .7rem; font-size: .85rem;
+  }
+  .back:hover { color: var(--text); }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .card h2 { margin-top: 0; font-size: 1rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 .3rem; }
+  .meta { color: var(--text-muted); font-size: .85rem; }
+  .badge {
+    font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em;
+    padding: .15rem .5rem; border-radius: 999px; color: white; background: var(--text-muted);
+  }
+  .badge.pending { background: var(--pending); }
+  .badge.accepted { background: var(--accepted); }
+  .badge.rejected { background: var(--rejected); }
+  .badge.tag {
+    background: transparent; color: var(--text-muted); border: 1px solid var(--border);
+    font-weight: normal; text-transform: none; letter-spacing: 0; margin-right: .3rem;
+  }
+  .empty { color: var(--text-muted); font-style: italic; }
+  ul.timeline { list-style: none; margin: 0; padding: 0; }
+  ul.timeline li {
+    border-left: 2px solid var(--border); padding: .1rem 0 .9rem .9rem; margin-left: .3rem; position: relative;
+  }
+  ul.timeline li::before {
+    content: ''; position: absolute; left: -5px; top: .3rem; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--linked);
+  }
+  ul.timeline li:last-child { padding-bottom: 0; }
+  .event-name { font-weight: 600; text-transform: capitalize; }
+  ul.plain { margin: .4rem 0 0; padding-left: 1.1rem; }
+  ul.plain li { margin-bottom: .3rem; font-size: .88rem; }
+</style>
+</head>
+<body>
+<a class="back" href="{{ url_for('dashboard') }}">&larr; back to dashboard</a>
+
+<h1>{{ item.subcategory }}</h1>
+<p class="meta">
+  <span class="badge {{ item.get('status', 'pending') }}">{{ item.get('status', 'pending') }}</span>
+  ({{ item.actionable }}) &middot; in plan <a href="{{ url_for('dashboard') }}#{{ plan.plan_id }}">{{ plan.interest }}</a>
+  &middot; <a href="{{ item.href }}" target="_blank" rel="noopener">source &rarr;</a>
+</p>
+<p>{{ item.action }}</p>
+
+<div class="card">
+  <h2>Tags</h2>
+  {% if item.get('tags') %}
+    {% for tag in item.tags %}<span class="badge tag">{{ tag }}</span>{% endfor %}
+  {% else %}
+    <p class="empty">No tags yet — generated once this item's plan is submitted.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>History</h2>
+  {% if item.get('history') %}
+  <ul class="timeline">
+    {% for h in item.history %}
+    <li>
+      <span class="event-name">{{ h.event }}</span>
+      <span class="meta">— {{ h.at }}</span><br>
+      {% if h.from_plan %}<span class="meta">from &ldquo;{{ h.from_plan }}&rdquo;</span>{% endif %}
+      {% if h.score is not none %}<span class="meta">&middot; score {{ h.score }}</span>{% endif %}
+      {% if h.reason %}<div class="meta">{{ h.reason }}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p class="empty">No history yet — this item hasn't been through a reevaluation pass
+      (tagged, reassigned, or orphaned). See ROADMAP.md §2.2.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Taxonomy evidence</h2>
+  {% if taxonomy_evidence %}
+    <p class="meta">This item was part of the cluster that promoted category
+      &ldquo;{{ taxonomy_evidence.category }}&rdquo; (taxonomy v{{ taxonomy_evidence.version }},
+      {{ taxonomy_evidence.promoted_at }}).</p>
+    <p>{{ taxonomy_evidence.evidence.description }}</p>
+    <p class="meta">Cluster size: {{ taxonomy_evidence.evidence.cluster_size }}</p>
+    {% if taxonomy_evidence.evidence.grounding_citations %}
+    <ul class="plain">
+      {% for c in taxonomy_evidence.evidence.grounding_citations %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  {% else %}
+    <p class="empty">This item wasn't part of a cluster that promoted a new category.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>This item's plan — grounding &amp; recall</h2>
+  {% if plan.get('grounding') and plan.grounding.grounded %}
+    <p class="meta">Grounded citations (other posts you saved):</p>
+    <ul class="plain">
+      {% for c in plan.grounding.citations %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+  {% if plan.get('memory') and plan.memory.recalled %}
+    <p class="meta">VectorAI DB recall — similar past posts:</p>
+    <ul class="plain">
+      {% for m in plan.memory.memories %}
+      <li><span class="badge {{ m.get('status', 'pending') }}">{{ m.get('status', 'pending') }}</span>
+        ({{ m.get('score') }}) {{ m.get('subcategory') }} — {{ m.get('action') }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  {% if not ((plan.get('grounding') and plan.grounding.grounded) or (plan.get('memory') and plan.memory.recalled)) %}
+    <p class="empty">No grounding or recall surfaced for this item's plan.</p>
+  {% endif %}
+</div>
+
+</body>
+</html>
+"""
+
 
 def _exports_manifest() -> dict | None:
     if not exporter.EXPORTS_MANIFEST_FILE.exists():
@@ -860,6 +1035,16 @@ def download_export(filename):
     keeps this safe against path traversal by construction, same reasoning as
     every other file-serving route needs, even on a localhost-only dashboard."""
     return send_from_directory(exporter.EXPORTS_DIR, filename, as_attachment=True)
+
+
+@app.route("/item/<path:href>")
+def item_detail(href):
+    plan, item = _find_item_by_href(href)
+    if item is None:
+        abort(404)
+    return render_template_string(
+        ITEM_PAGE, plan=plan, item=item, taxonomy_evidence=_taxonomy_evidence_for_href(href),
+    )
 
 
 if __name__ == "__main__":
