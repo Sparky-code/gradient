@@ -1,6 +1,6 @@
 # cited.md
 
-_Generated 2026-07-28T19:38:26.128571+00:00 — 11 interest plan(s), 0 low-signal post(s) filtered out._
+_Generated 2026-07-29T17:40:26.230838+00:00 — 11 interest plan(s), 0 low-signal post(s) filtered out._
 
 ## ✅ travel and adventure — `plan-travel-and-adventure` (accepted)
 
@@ -96,7 +96,7 @@ _Generated 2026-07-28T19:38:26.128571+00:00 — 11 interest plan(s), 0 low-signa
 
 ## ✅ personal finance and investing — `plan-personal-finance-and-investing` (accepted)
 
-- ✅ **wealth building strategies for families** (how_to, accepted): Use the strategies mentioned to build your own wealth through passive income, tax-efficient investing, and emergency savings.
+- ✅ **wealth building strategies for families** (how_to, accepted) _[$175,000 after taxes, short-term rental property, $3,000/month net income, $90,000 emergency savings, roth 401(k) contributions, $14,000/year roth ira, $vti stock, $vxus stock, $qqq stock, 12.2% historical return, $8.31m at age 65, $2m hsa, $36,000/year str income]_: Use the strategies mentioned to build your own wealth through passive income, tax-efficient investing, and emergency savings.
   - $175,000 after taxes
   - short-term rental property
   - $3,000/month net income from STR
@@ -111,7 +111,7 @@ _Generated 2026-07-28T19:38:26.128571+00:00 — 11 interest plan(s), 0 low-signa
   - $2M in HSA
   - $36,000/year from STR property
   - source: <https://www.instagram.com/reel/DJpVK3OSV2q/>
-- ✅ **manifestation techniques and neuroscience** (how_to, accepted): Apply the 4-step manifestation process to clarify and focus on what you want, and use the Parrot app to reinforce positive thoughts.
+- ✅ **manifestation techniques and neuroscience** (how_to, accepted) _[4-step manifestation process, reticular activation system, parrot app, affirmations, neuroscience, positive thoughts]_: Apply the 4-step manifestation process to clarify and focus on what you want, and use the Parrot app to reinforce positive thoughts.
   - The post describes a 4-step manifestation process
   - It mentions the Reticular Activation System (RAS) as a neuroscience concept
   - It suggests using an app called Parrot to record and play back affirmations
@@ -125,7 +125,7 @@ _Generated 2026-07-28T19:38:26.128571+00:00 — 11 interest plan(s), 0 low-signa
 
 ## ✅ productivity and career — `plan-productivity-and-career` (accepted)
 
-- ✅ **career development and productivity tips** (how_to, accepted): Implement the 8 weekly and monthly productivity and career development strategies listed in the post.
+- ✅ **career development and productivity tips** (how_to, accepted) _[weekly wins archive, linkedin thought library, monthly mentor coffee, industry pulse tracker, build one thing per month, cold outreach challenge]_: Implement the 8 weekly and monthly productivity and career development strategies listed in the post.
   - 1. Your Weekly Wins Archive
   - 2. LinkedIn Thought Library
   - 3. The Monthly Mentor Coffee
@@ -136,7 +136,7 @@ _Generated 2026-07-28T19:38:26.128571+00:00 — 11 interest plan(s), 0 low-signa
   - 8. The Monthly Skill Sprint
   - Save this for January 1, 2026
   - source: <https://www.instagram.com/reel/DS5ETT_jY3M/>
-- ✅ **remote job resources and advice** (tool_resource, accepted): Use the job boards and resources mentioned to find remote job opportunities.
+- ✅ **remote job resources and advice** (tool_resource, accepted) _[#ladders, #flexjobs, #workingnomads, #jobboard, #remotejobs, #workfromanywhere]_: Use the job boards and resources mentioned to find remote job opportunities.
   - #workfromanywhere
   - #remotework
   - #remotejobs

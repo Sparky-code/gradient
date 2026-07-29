@@ -419,6 +419,19 @@ def test_item_detail_shows_taxonomy_evidence_when_href_in_cluster(client, isolat
     assert b"citation one" in resp.data
 
 
+def test_item_detail_taxonomy_evidence_falls_back_to_legacy_senso_citations(client, isolated_env):
+    href = "https://example.com/a"
+    write_plans(make_plan(plan_id="plan-x", interest="new hobby", items=[make_item(href=href)]))
+    taxonomy.promote("new hobby", evidence={
+        "cluster_size": 3, "cluster_hrefs": [href], "description": "promoted before the field rename",
+        "senso_citations": ["an old-style citation"], "reuse_check_cleared": True,
+    })
+
+    resp = client.get(f"/item/{href}")
+    assert resp.status_code == 200
+    assert b"an old-style citation" in resp.data
+
+
 def test_item_detail_no_taxonomy_evidence_when_href_not_in_any_cluster(client, isolated_env):
     href = "https://example.com/a"
     write_plans(make_plan(plan_id="plan-x", interest="new hobby", items=[make_item(href=href)]))
@@ -453,3 +466,65 @@ def test_dashboard_item_row_links_to_item_detail(client, isolated_env):
     resp = client.get("/")
     assert resp.status_code == 200
     assert b'/item/https://example.com/a' in resp.data
+
+
+# ---------------------------------------------------------------------------
+# GET /taxonomy
+# ---------------------------------------------------------------------------
+
+def test_taxonomy_view_empty_state(client, isolated_env):
+    resp = client.get("/taxonomy")
+    assert resp.status_code == 200
+    assert b"No categories have been auto-promoted yet" in resp.data
+    assert b"None." in resp.data  # seeded section, no history to attribute it to
+
+
+def test_taxonomy_view_shows_seeded_categories(client, isolated_env):
+    taxonomy.ensure_seeded(["cooking", "hiking"])
+    resp = client.get("/taxonomy")
+    assert resp.status_code == 200
+    assert b"cooking" in resp.data
+    assert b"hiking" in resp.data
+    assert b"No categories have been auto-promoted yet" in resp.data
+
+
+def test_taxonomy_view_shows_promotion_evidence_newest_first(client, isolated_env):
+    taxonomy.promote("first category", evidence={
+        "cluster_size": 2, "cluster_hrefs": ["https://example.com/a"],
+        "description": "the first ever promoted category", "grounding_citations": ["cite one"],
+        "reuse_check_cleared": True,
+    })
+    taxonomy.promote("second category", evidence={
+        "cluster_size": 4, "cluster_hrefs": ["https://example.com/b"],
+        "description": "a later promoted category", "grounding_citations": ["cite two"],
+        "reuse_check_cleared": True,
+    })
+
+    resp = client.get("/taxonomy")
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "second category" in body and "first category" in body
+    # newest promotion (second category) should render before the older one
+    assert body.index("second category") < body.index("first category")
+    assert "a later promoted category" in body
+    assert "cite two" in body
+    assert "https://example.com/b" in body
+
+
+def test_taxonomy_view_falls_back_to_legacy_senso_citations_field(client, isolated_env):
+    """Real production data promoted before the Senso->VectorAI decoupling
+    (ROADMAP.md §1) carries `senso_citations`, not `grounding_citations` —
+    the view must still surface it, not silently render an empty list."""
+    taxonomy.promote("legacy category", evidence={
+        "cluster_size": 3, "cluster_hrefs": [], "description": "promoted before the field rename",
+        "senso_citations": ["an old-style citation"], "reuse_check_cleared": True,
+    })
+    resp = client.get("/taxonomy")
+    assert resp.status_code == 200
+    assert b"an old-style citation" in resp.data
+
+
+def test_dashboard_links_to_taxonomy_view(client, isolated_env):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"/taxonomy" in resp.data

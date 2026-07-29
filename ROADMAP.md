@@ -125,11 +125,17 @@ item, and most of it still doesn't survive past a JSONL line nobody is meant to 
    plan's grounding citations + VectorAI DB recall hits — both already live from §1, now surfaced
    next to the item's own history instead of only in `cited.md`. Looked up by `href` (not
    `plan_id`) so the permalink survives a reassignment.
-4. **A taxonomy view** — separate from any one item: `taxonomy.load_current()` already has every
-   promoted category's version history and promotion evidence; there's no UI for it at all today,
-   only `data/state/taxonomy/current.json` and `vN.json` files. A person should be able to see
-   "here are the categories this agent has invented for you, and why," which is a genuinely
-   interesting artifact of the self-evolving claim and currently completely invisible.
+4. ✅ **A taxonomy view — DONE.** `GET /taxonomy` in `webui.py` (linked from a new Taxonomy stat
+   card on the dashboard, mirroring the existing Policy card) reads `taxonomy.load_current()` and
+   shows seeded categories separately from auto-promoted ones, each promotion's description,
+   cluster size, member posts (linked to their item detail pages from §2.3), and grounding
+   citations — newest promotion first. Along the way, both this view and the §2.3 item detail
+   view were fixed to fall back to the pre-decoupling `senso_citations` evidence key (real
+   categories promoted before §1's Senso→VectorAI rename still carry the old field name; without
+   the fallback their citations silently rendered as an empty list).
+
+**§2 is now fully done** — tags, item history, the item detail view, and the taxonomy view are
+all live in `webui.py`.
 
 ---
 
@@ -198,13 +204,12 @@ notice the pattern and no way to act on it without the learning-plan structuring
 
 **§1 shipped out of order** relative to the original plan below (it was tackled before §2), which
 turned out fine — it was self-contained and didn't depend on §2's UI work landing first. **§2 is
-in progress** — cheapest of what's left, no design risk, and makes every other change in this
-roadmap (including §1's local grounding, now live, and §3's profile) something a person can
-actually *see*, rather than another thing that only shows up in a JSONL file. Tags (2.1),
-`history` (2.2), and the item detail view (2.3) are all live; only the taxonomy view (2.4) is
-left. **§3 last**, deliberately —
-it's the most valuable direction long-term but also the least scoped right now (the
-self-profile's data shape, the learning-plan ordering logic, and §1's still-open
+now done** — it was the cheapest of the three, carried no design risk, and makes every other
+change in this roadmap (§1's local grounding and §3's future profile alike) something a person
+can actually *see*, rather than another thing that only shows up in a JSONL file. **§3 is next,
+and last**, deliberately — it's the most valuable direction long-term but also the least scoped
+right now (the self-profile's data shape, the learning-plan ordering logic, and §1's still-open
 external-grounding question all need real design decisions before implementation starts), and
-doing it on top of §1+§2 instead of underneath them means it inherits a visible, trustworthy
-foundation instead of another opaque process nobody can see the reasoning behind.
+doing it on top of §1+§2 instead of underneath them means it now inherits a visible, trustworthy
+foundation (tags, history, item detail, taxonomy view) instead of another opaque process nobody
+could see the reasoning behind.

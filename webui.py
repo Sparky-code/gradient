@@ -36,6 +36,10 @@ Routes:
                       cluster that promoted a category), and this item's
                       plan's grounding citations + VectorAI DB recall hits.
                       See ROADMAP.md §2.3.
+  GET  /taxonomy          every category this agent has invented, seeded vs.
+                      auto-promoted, and the cluster/grounding evidence
+                      behind each promotion — see agent/taxonomy.py and
+                      ROADMAP.md §2.4.
 """
 
 import json
@@ -517,6 +521,27 @@ PAGE = """
   <p class="meta full">Every 5 feedback examples auto-promotes a new policy — checked at the end of each run cycle, not immediately on Accept/Reject. See RUNBOOK.md §9.</p>
 </section>
 
+<section class="card stat-row">
+  <div class="stat-row-header">
+    <h2>Taxonomy</h2>
+    <span class="info-icon" tabindex="0" aria-label="What is the taxonomy?"
+      data-tooltip="This agent mints its own categories: when enough rejected/uncategorized items cluster together and don't already match an existing category, that cluster auto-promotes a brand new one — no approval step. See the full history and evidence behind each one.">i</span>
+  </div>
+  <div>
+    <span class="stat-label">Taxonomy version</span>
+    <span class="stat-value">{{ current_taxonomy.version }}</span>
+  </div>
+  <div>
+    <span class="stat-label">Categories</span>
+    <span class="stat-value">{{ current_taxonomy.categories|length }}</span>
+  </div>
+  <div>
+    <span class="stat-label">Auto-promoted</span>
+    <span class="stat-value">{{ current_taxonomy.history|length }}</span>
+  </div>
+  <p class="meta full"><a href="{{ url_for('taxonomy_view') }}">See every category and why it was invented &rarr;</a></p>
+</section>
+
 <h2 class="section-title">Plans <span class="count">{{ plans|length }}</span></h2>
 {% for plan in plans %}
   <div class="plan-card {{ plan.status }}">
@@ -876,9 +901,12 @@ ITEM_PAGE = """
       {{ taxonomy_evidence.promoted_at }}).</p>
     <p>{{ taxonomy_evidence.evidence.description }}</p>
     <p class="meta">Cluster size: {{ taxonomy_evidence.evidence.cluster_size }}</p>
-    {% if taxonomy_evidence.evidence.grounding_citations %}
+    {# senso_citations is the pre-decoupling field name (ROADMAP.md §1) — real history entries
+       promoted before that migration still carry it instead of grounding_citations. #}
+    {% set citations = taxonomy_evidence.evidence.grounding_citations or taxonomy_evidence.evidence.senso_citations %}
+    {% if citations %}
     <ul class="plain">
-      {% for c in taxonomy_evidence.evidence.grounding_citations %}<li>{{ c }}</li>{% endfor %}
+      {% for c in citations %}<li>{{ c }}</li>{% endfor %}
     </ul>
     {% endif %}
   {% else %}
@@ -912,6 +940,110 @@ ITEM_PAGE = """
 </html>
 """
 
+TAXONOMY_PAGE = """
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Taxonomy — Gradient</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --surface: #ffffff; --border: #e3e5ea; --text: #1c1e21; --text-muted: #6b7280;
+    --linked: #3b82f6; --radius: 10px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --surface: #1d2025; --border: #2b2f36; --text: #e7e9ec; --text-muted: #9aa1ab; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); max-width: 800px; margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem; line-height: 1.5;
+  }
+  a { color: var(--linked); }
+  .back {
+    display: inline-block; margin-bottom: 1.25rem; text-decoration: none; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: .35rem .7rem; font-size: .85rem;
+  }
+  .back:hover { color: var(--text); }
+  h1 { font-size: 1.25rem; margin: 0 0 .3rem; }
+  .subtitle { color: var(--text-muted); font-size: .85rem; margin: 0 0 1.5rem; }
+  .section-title { font-size: 1.05rem; margin: 2rem 0 .75rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .badge {
+    display: inline-block; font-size: .78rem; font-weight: 600; background: rgba(127,127,127,.12);
+    color: var(--text-muted); border-radius: 999px; padding: .15rem .6rem; margin: 0 .35rem .35rem 0;
+  }
+  .meta { color: var(--text-muted); font-size: .85rem; }
+  .empty { color: var(--text-muted); font-style: italic; }
+  ul.plain { margin: .4rem 0 0; padding-left: 1.1rem; }
+  ul.plain li { margin-bottom: .3rem; font-size: .88rem; }
+  .promotion-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .version-badge {
+    font-size: .7rem; font-weight: 600; background: var(--linked); color: white;
+    border-radius: 999px; padding: .1rem .55rem;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="{{ url_for('dashboard') }}">&larr; back to dashboard</a>
+
+<h1>Taxonomy — v{{ version }}</h1>
+<p class="subtitle">Every category this agent has invented for you, and why. New categories
+  auto-promote once a genuine cluster of uncategorized posts doesn't already match an existing
+  one — no approval step (see RUNBOOK.md §"What this is"). Seeded categories below came from the
+  original export instead of being mined by this agent.</p>
+
+<h2 class="section-title">Seeded categories <span class="meta">({{ seeded|length }})</span></h2>
+<div class="card">
+  {% if seeded %}
+    {% for c in seeded %}<span class="badge">{{ c }}</span>{% endfor %}
+  {% else %}
+    <p class="empty">None{% if history %} — every current category was auto-promoted below{% endif %}.</p>
+  {% endif %}
+</div>
+
+<h2 class="section-title">Auto-promoted categories <span class="meta">({{ history|length }})</span></h2>
+{% for h in history %}
+<div class="card">
+  <div class="promotion-head">
+    <b>{{ h.category }}</b>
+    <span class="version-badge">v{{ h.version }}</span>
+    <span class="meta">{{ h.promoted_at }}</span>
+  </div>
+  <p>{{ h.evidence.description }}</p>
+  <p class="meta">
+    Cluster size: {{ h.evidence.cluster_size }}
+    {% if h.evidence.reuse_check_cleared %}&middot; checked against every existing category first, none matched closely enough to reuse{% endif %}
+  </p>
+  {% if h.evidence.cluster_hrefs %}
+  <p class="meta">Posts in this cluster:</p>
+  <ul class="plain">
+    {% for href in h.evidence.cluster_hrefs %}
+    <li><a href="{{ url_for('item_detail', href=href) }}">{{ href }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% set citations = h.evidence.grounding_citations or h.evidence.senso_citations %}
+  {% if citations %}
+  <p class="meta">Grounding citations at promotion time:</p>
+  <ul class="plain">
+    {% for c in citations %}<li>{{ c }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</div>
+{% else %}
+<p class="empty">No categories have been auto-promoted yet — this agent hasn't found a genuine
+  cluster of uncategorized posts distinct from what already exists.</p>
+{% endfor %}
+
+</body>
+</html>
+"""
+
 
 def _exports_manifest() -> dict | None:
     if not exporter.EXPORTS_MANIFEST_FILE.exists():
@@ -925,7 +1057,8 @@ def dashboard():
     snapshots = store.list_snapshots()
     return render_template_string(
         PAGE, plans=plans, run_state=_run_state, submit_state=_submit_state,
-        current_policy=policy.load_current(), session_log_tail=_session_log_tail(),
+        current_policy=policy.load_current(), current_taxonomy=taxonomy.load_current(),
+        session_log_tail=_session_log_tail(),
         latest_snapshot=snapshots[0] if snapshots else None,
         exports_manifest=_exports_manifest(),
     )
@@ -1045,6 +1178,15 @@ def item_detail(href):
     return render_template_string(
         ITEM_PAGE, plan=plan, item=item, taxonomy_evidence=_taxonomy_evidence_for_href(href),
     )
+
+
+@app.route("/taxonomy")
+def taxonomy_view():
+    current = taxonomy.load_current()
+    promoted_names = {h["category"] for h in current.get("history", [])}
+    seeded = sorted(c for c in current["categories"] if c not in promoted_names)
+    history = list(reversed(current.get("history", [])))  # newest promotion first
+    return render_template_string(TAXONOMY_PAGE, version=current["version"], seeded=seeded, history=history)
 
 
 if __name__ == "__main__":
