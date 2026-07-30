@@ -2,8 +2,8 @@
 
   watch drop/ -> ingest -> reclassify (policy) -> evolve taxonomy from
     "other" posts -> plan -> ground + recall (both VectorAI DB) -> publish
-    cited.md -> log to the local session log -> check Pioneer for a retrain/promote pass ->
-    sleep -> repeat
+    cited.md -> recompute self-profile -> log to the local session log ->
+    check Pioneer for a retrain/promote pass -> sleep -> repeat
 
 Ingestion cadence is bounded by when export drops land (see ingest.py) — the
 autonomy claim is about everything downstream of that running with no manual
@@ -310,6 +310,21 @@ def run_once() -> dict:
         "event": "publish", "new_files": len(new_files), "new_plans": total_new_plans,
         "failed_files": failed_files,
     })
+
+    # Once per pass, not per file above — this aggregates ALL of plans.json,
+    # not one drop file's posts (ROADMAP.md §3, "self-profiling"). Also kept
+    # fresh directly from agent/feedback.py and agent/reevaluator.py whenever
+    # plans.json changes outside a run cycle (a feedback click, a plan
+    # submit) — this call just guarantees it reflects anything a new file
+    # itself changed (new items, taxonomy/export-type promotions).
+    profiler_run = _coordinator.create_run(
+        "profiler",
+        input=[orchestrator.Message(role="user", parts=[
+            orchestrator.MessagePart(content=None, content_type="application/json"),
+        ])],
+    )
+    if profiler_run.status != "completed":
+        session_log.log_session({"event": "profile_recompute_failed", "reason": profiler_run.error})
 
     retrain_report = pioneer.maybe_retrain()
     if retrain_report:

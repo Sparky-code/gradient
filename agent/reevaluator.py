@@ -22,7 +22,9 @@ store.py's module docstring for the data-loss bug this design avoids.
 
 from datetime import datetime, timezone
 
-from agent import cancellation, exporter, planner, publisher, session_log, store, taxonomy, taxonomy_evolver, tagger
+from agent import (
+    cancellation, exporter, planner, profile, publisher, session_log, store, taxonomy, taxonomy_evolver, tagger,
+)
 from agent.adapters import vectorai
 
 REASSIGN_MIN_SCORE = vectorai.ANCHOR_REUSE_SCORE  # same "is this genuinely the same topic" bar
@@ -190,5 +192,6 @@ def reevaluate_plan(plan_id: str) -> dict:
 
     publisher.render()
     exporter.render_all()
+    profile.recompute()  # ROADMAP.md §3 — tag/reassign/orphan changes plans.json, keep it fresh
     session_log.log_session({"event": "plan_reevaluated", **result})
     return result

@@ -150,18 +150,41 @@ next, once §1 and §2 give it a clean, visible foundation to build on.
 Three concrete directions, roughly in order of how directly they're already supported by data
 this pipeline already produces:
 
-### Self-profiling
+### Self-profiling — ✅ DONE
 
-The raw material already exists and is already real: VectorAI DB's episodic memory
-(`vectorai.remember_posts()` / `update_status()`) has every post's category, subcategory, tags,
-and actual accept/reject outcome, accumulating pass over pass. Nobody has ever aggregated it into
-a profile. A person's real, evolving interest graph — which categories keep recurring, which
-ones they consistently reject despite the agent kept re-surfacing them (a genuine signal the
-suppression policy should already be catching, worth cross-checking against `policy.py`'s
-exemplars), which tags cluster together across categories — is sitting in state this system
-already writes, just never read back as a *profile* rather than a transaction log. This is the
-lowest-lift of the three: it's a new read/aggregation pass over existing data, not a new kind of
-data collection.
+**Status: shipped.** The original text below assumed VectorAI DB's episodic memory
+(`remember_posts()`/`update_status()`) held enough to aggregate directly — checked while
+implementing, and it doesn't: `remember_posts()`'s payload is only `href/category/subcategory/
+actionable/action/status`, no tags, no timestamps, and `update_status()` overwrites `status` in
+place with no history. The real, complete source of truth turned out to already be local and
+already sufficient: `plans.json` (current category/tags/status per item). A profile can be built
+from that alone, no new VectorAI infrastructure needed.
+
+Three decisions were made explicitly before writing any code (see conversation record — this
+paragraph is the durable summary):
+1. **Scope this pass: self-profiling only**, not learning plans or self-directed next actions —
+   both of those still depend on open questions below (external grounding for learning plans;
+   both self-profiling and learning plans existing first for next-actions).
+2. **Architecture: cache to `data/state/profile/current.json`, recomputed via a `profiler`
+   orchestrator agent** — not policy.py/taxonomy.py's versioned-promotion pattern (a profile has
+   no discrete "promotion" event, just a full recompute every time), and not purely on-demand
+   either, even though the aggregation needs no local-model call and would be cheap enough to
+   compute live at page-load. The agent is dispatched once per `run_once()` pass (not per drop
+   file — it aggregates ALL plans, not one file's posts), and `agent/profile.py`'s `recompute()`
+   is also called directly (bookkeeping-call style, same precedent as the VectorAI-remember write
+   in `loop.py`) from `agent/feedback.py` (`record()`, `record_item()`) and
+   `agent/reevaluator.py` (`reevaluate_plan()`) — everywhere plans.json actually changes, not just
+   the drop-file pipeline, so the cached profile never goes stale behind a click.
+3. **Content: descriptive only, first version** — category/tag frequency, accept/reject rate per
+   category, tag co-occurrence (pairs seen together more than once, to filter one-off noise). The
+   sharper cross-check this section originally floated — flagging categories the user keeps
+   rejecting that `policy.py`'s suppression should already be catching — is deliberately deferred
+   to a follow-on now that the descriptive view exists to build it on top of.
+
+Implementation: `agent/profile.py` (`compute()`/`recompute()`/`load_current()`), a `profiler`
+agent in `orchestrator.py`, dispatch from `loop.py`'s `run_once()`, direct `recompute()` calls
+from `feedback.py`/`reevaluator.py`, a `GET /profile` view + dashboard stat card in `webui.py`,
+and `profile_current.json` added to `store.py`'s snapshot/restore targets.
 
 ### Learning plans
 
@@ -172,31 +195,98 @@ missing is a pass that takes a resolved, tagged cluster and orders it (prerequis
 dependent ones, breadth-first survey items before deep-dive items) rather than leaving it as a
 flat bulleted list. This is the one direction where the §1 open question about external grounding
 matters most: a learning plan built only from what someone already saved is inherently limited to
-what they already knew enough to save — pulling in real external material (a genuinely-scoped
-grounding integration, not Senso-as-placeholder) is probably necessary for a learning plan to be
-more useful than the raw saved posts it's built from.
+what they already knew enough to save — pulling in real external material is probably necessary
+for a learning plan to be more useful than the raw saved posts it's built from.
+
+**§1's external-grounding question is answered: yes, pull in real external material.** What that
+actually needs (researched, not guessed — see conversation record for the full comparisons):
+
+1. **Retrieval backend — still being decided, deliberately stubbed.** Senso, as this repo
+   originally used it, was never external grounding — it was a bring-your-own-corpus KB (push the
+   user's own posts in, search them back out), the same capability VectorAI DB now does locally.
+   Real external grounding needs a different class of tool: a live web-search/retrieval API. Three
+   real candidates compared, no clean winner: **Exa** (neural/semantic search, full page text via
+   `contents.text`, free tier 1,000/mo — best fit for fuzzy "find a good tutorial about X" queries,
+   but raised pricing $5→$7/1k in March 2026, an early tightening signal), **Tavily** (RAG-shaped
+   output, free tier 1,000 credits/mo, but documented stale/cached-link complaints that cut against
+   "cite genuinely external sources" being the point, plus Nebius's Feb 2026 acquisition as a
+   vendor-risk flag), **self-hosted SearXNG** (zero cost, zero vendor, truest to local-first, but a
+   real and actively-discussed operational burden — backend search engines individually blocking a
+   fresh instance via CAPTCHA/fingerprinting, not a "docker compose up and forget" service like the
+   existing VectorAI container). Google CSE and Bing Search API are dead ends (closed to new users
+   / retired). Landing recommendation was Exa primary + SearXNG fallback, matching this project's
+   own Pioneer precedent (real call + honestly-documented failure + a real, not stub, local
+   fallback) — final pick deferred pending further research.
+2. **Source-quality composite — decided: build the full version.** No true automatable "industry
+   standard" exists for general web pages (E-E-A-T has no API, CRAAP is a human-judgment
+   checklist, NewsGuard is sales-gated, citation metrics only cover academic papers). The
+   composite: structural metadata heuristics (HTTPS, byline, about page, recency — free), an
+   LLM-as-judge rubric pass reusing the local model already running for tagging (approximates the
+   human-judgment parts of CRAAP/E-E-A-T no API can give you), and cross-source corroboration
+   (does more than one independent search result agree — nearly free since a multi-result search
+   call already returns it).
+3. ✅ **Trust curation — DONE: mechanical auto-evolve only, framed honestly as usage-survival.**
+   Full design rationale and mechanics: **[docs/SOURCE_TRUST.md](docs/SOURCE_TRUST.md)**. Summary:
+   real systems draw a hard line — *behavioral* trust signals auto-evolve fine with no human gate
+   (Spamhaus, Safe Browsing, Stack Overflow reputation — reversible, non-adversarial, matches this
+   project's own `taxonomy_evolver.py` pattern), but *factual-reliability* judgments stay
+   human-gated in every real system studied (NewsGuard, MBFC, Wikipedia's Reliable Sources
+   noticeboard — adversarial, consequential, unlike a wrongly-named category). Landing design: a
+   domain that survives `PROMOTION_STREAK` (3, matching `CLUSTER_MIN_SIZE`) clean appearances
+   auto-promotes to a "trusted" tier, demotes immediately on a single incident, and is documented
+   everywhere as NOT a factual-reliability claim — just "hasn't caused a problem yet." A real
+   human-review step was considered and set aside for now, not ruled out permanently.
+
+**Implemented so far**:
+- `agent/adapters/external_search.py` — the retrieval contract every backend (real or stub) must
+  satisfy: `search(query, max_results) -> {"grounded", "source", "results": [{"url", "title",
+  "excerpt", "raw_content", "published_date"}], "reason"}`. `raw_content`/`published_date` are the
+  two fields that vary by vendor (Exa/Tavily return full text and a date, SearXNG doesn't) —
+  deliberately optional so downstream scoring works off `excerpt`/`url` alone. Currently returns
+  the stub shape unconditionally (no backend chosen yet) — same real-call-vs-local-fallback split
+  as `pioneer_api.py`/`pioneer.py`, just not yet past the "which real call" decision.
+- `agent/source_quality.py` + `agent/_source_quality_worker.py` — the full composite decided
+  above, built entirely against `external_search.py`'s contract (vendor-agnostic, not blocked on
+  the retrieval decision): `_structural_score()` (HTTPS/byline/about-page/date, free/deterministic),
+  `_corroboration_flags()` (Jaccard keyword overlap between different-domain results, pure Python),
+  and an LLM-judge subprocess worker (same isolation pattern as `_tag_worker.py`, CRAAP/E-E-A-T-
+  inspired rubric prompt) combined into one `score_sources()` entry point. Deliberately does NOT
+  reuse the classification LoRA adapter (`agent/adapters/lora.py`) — that's trained on Instagram-
+  post accept/reject signal, an unrelated judgment task to source credibility.
+
+- `agent/source_trust.py` — the usage-survival registry above, keyed on `source_quality.py`'s
+  automated composite today (no learning-plan consumer exists yet to supply real accept/reject
+  feedback), with an explicit `feedback` seam for that to plug in once one does. No caller yet —
+  see `docs/SOURCE_TRUST.md`'s "what's genuinely still open" section.
+
+The actual cluster-ordering pass (the learning-plan feature itself, the thing that would call
+`external_search.search()` → `source_quality.score_sources()` → `source_trust.record_pass()` in
+sequence) is still open, and is the only piece left blocked on the retrieval vendor decision.
 
 ### Self-directed next actions
 
-The narrowest, most product-shaped version of this: use the profile (above) to proactively
-surface "you have 6 saved posts about X, all accepted, none acted on yet — want to turn this into
-a plan?" This is the piece that would make `cited.md` (or its dashboard equivalent) feel like it's
-working *for* the person between sessions, not just reporting what happened last session. Depends
-on both of the above existing first — there's no "next action" to suggest without a profile to
-notice the pattern and no way to act on it without the learning-plan structuring to turn it into.
+The narrowest, most product-shaped version of this: use the profile (now live, see above) to
+proactively surface "you have 6 saved posts about X, all accepted, none acted on yet — want to
+turn this into a plan?" This is the piece that would make `cited.md` (or its dashboard
+equivalent) feel like it's working *for* the person between sessions, not just reporting what
+happened last session. Depends on both of the above existing first — there's no "next action" to
+suggest without a profile to notice the pattern (now built) and no way to act on it without the
+learning-plan structuring to turn it into (not yet built).
 
-### What this needs, concretely
+### What learning plans + self-directed next actions still need, concretely
 
-- A new data surface: whatever the self-profile actually is (probably a `data/state/profile.json`
-  or a new VectorAI DB collection aggregating across the episodic memory rather than living in it)
-  — this is a design decision, not an implementation detail, and should happen before any code
-  gets written for it.
-- Likely a sixth agent in `orchestrator.py`'s Coordinator (a `profiler` or `planner-v2` role),
-  keeping the existing pattern of "new capability = new named agent" rather than bolting this onto
-  `loop.py` directly.
-- A new dashboard surface entirely — this is not something `cited.md`'s per-plan bullet format can
-  absorb; profiles and learning plans are a different shape of artifact than "a list of posts,"
-  and deserve their own view rather than being squeezed into the existing one.
+- **Resolve §1's still-open external-grounding question first** — a learning plan built only from
+  what someone already saved is inherently limited to what they already knew enough to save;
+  whether that's acceptable or whether a genuinely-scoped external grounding integration is worth
+  adding is a real design decision, not an implementation detail, and should happen before a
+  learning-plan pass gets written.
+- Likely a new agent in `orchestrator.py`'s Coordinator for the learning-plan ordering pass (a
+  `planner-v2` role, matching the `profiler` precedent — "new capability = new named agent"
+  rather than bolting this onto `loop.py` directly).
+- A new dashboard surface for learning plans — not something `cited.md`'s per-plan bullet format
+  can absorb; a sequenced learning path is a different shape of artifact than "a list of posts,"
+  and deserves its own view, same reasoning that gave the profile its own `/profile` page rather
+  than squeezing it into the existing dashboard.
 
 ---
 
@@ -204,12 +294,12 @@ notice the pattern and no way to act on it without the learning-plan structuring
 
 **§1 shipped out of order** relative to the original plan below (it was tackled before §2), which
 turned out fine — it was self-contained and didn't depend on §2's UI work landing first. **§2 is
-now done** — it was the cheapest of the three, carried no design risk, and makes every other
-change in this roadmap (§1's local grounding and §3's future profile alike) something a person
-can actually *see*, rather than another thing that only shows up in a JSONL file. **§3 is next,
-and last**, deliberately — it's the most valuable direction long-term but also the least scoped
-right now (the self-profile's data shape, the learning-plan ordering logic, and §1's still-open
-external-grounding question all need real design decisions before implementation starts), and
-doing it on top of §1+§2 instead of underneath them means it now inherits a visible, trustworthy
-foundation (tags, history, item detail, taxonomy view) instead of another opaque process nobody
-could see the reasoning behind.
+done** — it was the cheapest of the three, carried no design risk, and makes every other change in
+this roadmap (§1's local grounding and §3's profile alike) something a person can actually *see*,
+rather than another thing that only shows up in a JSONL file. **§3 is in progress**: self-profiling
+(the lowest-lift of its three sub-directions) is done, landing on top of §1+§2's foundation exactly
+as planned (tags, history, item detail, and taxonomy view all feeding into a visible, trustworthy
+base rather than another opaque process). **Learning plans and self-directed next actions are
+next, and last**, deliberately — still the least scoped part of this roadmap (the learning-plan
+ordering logic and §1's still-open external-grounding question both need real design decisions
+before implementation starts), and now build on a real profile instead of a hypothetical one.

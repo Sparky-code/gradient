@@ -128,3 +128,23 @@ def test_export_type_evolver_registered_and_runs(isolated_env, coordinator, monk
     result = run.output[0].parts[0].content
     assert result["candidates_seen"] == 1
     assert result["promoted"] is None  # a single post never clusters (CLUSTER_MIN_SIZE=3)
+
+
+def test_profiler_registered_and_aggregates_current_plans(isolated_env, coordinator):
+    from tests.helpers import make_item, make_plan, write_plans
+
+    write_plans(make_plan(interest="hiking", items=[make_item(href="a", status="accepted")]))
+
+    run = coordinator.create_run(
+        "profiler",
+        input=[orchestrator.Message(role="user", parts=[
+            orchestrator.MessagePart(content=None, content_type="application/json"),
+        ])],
+    )
+    assert run.status == "completed", run.error
+    result = run.output[0].parts[0].content
+    assert result["total_items"] == 1
+    assert result["categories"][0]["name"] == "hiking"
+
+    from agent import profile
+    assert profile.load_current() == result  # recompute() persisted it, not just returned it

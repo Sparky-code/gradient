@@ -528,3 +528,46 @@ def test_dashboard_links_to_taxonomy_view(client, isolated_env):
     resp = client.get("/")
     assert resp.status_code == 200
     assert b"/taxonomy" in resp.data
+
+
+# ---------------------------------------------------------------------------
+# GET /profile
+# ---------------------------------------------------------------------------
+
+def test_profile_view_empty_state(client, isolated_env):
+    resp = client.get("/profile")
+    assert resp.status_code == 200
+    assert b"No items yet" in resp.data
+    assert b"No tags yet" in resp.data
+
+
+def test_profile_view_shows_category_stats_and_tags(client, isolated_env):
+    from agent import profile
+    write_plans(make_plan(interest="hiking", items=[
+        make_item(href="a", status="accepted", tags=["gear", "trail"]),
+        make_item(href="b", status="rejected", tags=["gear", "trail"]),
+    ]))
+    profile.recompute()
+
+    resp = client.get("/profile")
+    assert resp.status_code == 200
+    assert b"hiking" in resp.data
+    assert b"50" in resp.data  # 1/2 accept rate rendered as 50%
+    assert b"gear" in resp.data
+    assert b"gear + trail" in resp.data or b"trail + gear" in resp.data
+
+
+def test_dashboard_links_to_profile_view(client, isolated_env):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b"/profile" in resp.data
+
+
+def test_item_feedback_keeps_profile_fresh(client, isolated_env, stub_vectorai):
+    from agent import profile
+    write_plans(make_plan(plan_id="plan-x", interest="hiking", items=[make_item(href="https://example.com/a")]))
+    client.post("/feedback", data={"plan_id": "plan-x", "href": "https://example.com/a", "decision": "accept"})
+
+    result = profile.load_current()
+    assert result["total_items"] == 1
+    assert result["categories"][0]["accepted"] == 1

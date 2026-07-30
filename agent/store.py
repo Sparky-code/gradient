@@ -123,6 +123,8 @@ def _snapshot_targets() -> dict[str, Path]:
         "policy_current.json": config.STATE_DIR / "policy" / "current.json",
         "taxonomy_current.json": config.STATE_DIR / "taxonomy" / "current.json",
         "export_types_current.json": config.STATE_DIR / "export_types" / "current.json",
+        "profile_current.json": config.STATE_DIR / "profile" / "current.json",
+        "source_trust_current.json": config.STATE_DIR / "source_trust" / "current.json",
     }
 
 

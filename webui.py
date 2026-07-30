@@ -40,6 +40,10 @@ Routes:
                       auto-promoted, and the cluster/grounding evidence
                       behind each promotion — see agent/taxonomy.py and
                       ROADMAP.md §2.4.
+  GET  /profile           self-profile — recurring categories, accept/reject
+                      rate per category, and tag co-occurrence, aggregated
+                      from plans.json — see agent/profile.py and
+                      ROADMAP.md §3.
 """
 
 import json
@@ -47,7 +51,7 @@ import threading
 
 from flask import Flask, abort, redirect, render_template_string, request, send_from_directory, url_for
 
-from agent import cancellation, config, exporter, feedback, loop, policy, store, taxonomy
+from agent import cancellation, config, exporter, feedback, loop, policy, profile, store, taxonomy
 
 app = Flask(__name__)
 
@@ -540,6 +544,27 @@ PAGE = """
     <span class="stat-value">{{ current_taxonomy.history|length }}</span>
   </div>
   <p class="meta full"><a href="{{ url_for('taxonomy_view') }}">See every category and why it was invented &rarr;</a></p>
+</section>
+
+<section class="card stat-row">
+  <div class="stat-row-header">
+    <h2>Your profile</h2>
+    <span class="info-icon" tabindex="0" aria-label="What is the profile?"
+      data-tooltip="Aggregated straight from your own plans — which categories keep recurring, your accept/reject rate per category, and which tags cluster together. Recomputed every time a plan changes, not just once a day.">i</span>
+  </div>
+  <div>
+    <span class="stat-label">Items profiled</span>
+    <span class="stat-value">{{ current_profile.total_items }}</span>
+  </div>
+  <div>
+    <span class="stat-label">Recurring categories</span>
+    <span class="stat-value">{{ current_profile.categories|length }}</span>
+  </div>
+  <div>
+    <span class="stat-label">Distinct tags</span>
+    <span class="stat-value">{{ current_profile.tags|length }}</span>
+  </div>
+  <p class="meta full"><a href="{{ url_for('profile_view') }}">See your full interest profile &rarr;</a></p>
 </section>
 
 <h2 class="section-title">Plans <span class="count">{{ plans|length }}</span></h2>
@@ -1044,6 +1069,115 @@ TAXONOMY_PAGE = """
 </html>
 """
 
+PROFILE_PAGE = """
+<!doctype html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your profile — Gradient</title>
+<style>
+  :root {
+    --bg: #f5f6fa; --surface: #ffffff; --border: #e3e5ea; --text: #1c1e21; --text-muted: #6b7280;
+    --linked: #3b82f6; --accepted: #2f9e6e; --rejected: #d64545;
+    --radius: 10px; --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --surface: #1d2025; --border: #2b2f36; --text: #e7e9ec; --text-muted: #9aa1ab; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); max-width: 800px; margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem; line-height: 1.5;
+  }
+  a { color: var(--linked); }
+  .back {
+    display: inline-block; margin-bottom: 1.25rem; text-decoration: none; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 6px; padding: .35rem .7rem; font-size: .85rem;
+  }
+  .back:hover { color: var(--text); }
+  h1 { font-size: 1.25rem; margin: 0 0 .3rem; }
+  .subtitle { color: var(--text-muted); font-size: .85rem; margin: 0 0 1.5rem; }
+  .section-title { font-size: 1.05rem; margin: 2rem 0 .75rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 1rem 1.25rem; margin-bottom: 1rem; }
+  .meta { color: var(--text-muted); font-size: .85rem; }
+  .empty { color: var(--text-muted); font-style: italic; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table th { text-align: left; color: var(--text-muted); font-weight: 600; font-size: .75rem;
+    text-transform: uppercase; letter-spacing: .03em; padding: .4rem .5rem; border-bottom: 1px solid var(--border); }
+  table td { padding: .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table tr:last-child td { border-bottom: none; }
+  .rate-bar { display: inline-block; width: 60px; height: 6px; border-radius: 999px;
+    background: var(--rejected); overflow: hidden; vertical-align: middle; margin-right: .4rem; }
+  .rate-bar-fill { display: block; height: 100%; background: var(--accepted); }
+  .badge {
+    display: inline-block; font-size: .78rem; background: rgba(127,127,127,.12); color: var(--text-muted);
+    border-radius: 999px; padding: .15rem .6rem; margin: 0 .35rem .35rem 0;
+  }
+</style>
+</head>
+<body>
+<a class="back" href="{{ url_for('dashboard') }}">&larr; back to dashboard</a>
+
+<h1>Your profile</h1>
+<p class="subtitle">Aggregated straight from your own plans — not a survey, not a guess. Recomputed
+  every time a plan changes (ROADMAP.md §3), not just once a day.
+  {% if profile.generated_at %}Last updated {{ profile.generated_at }}.{% endif %}</p>
+
+<h2 class="section-title">Recurring categories <span class="meta">({{ profile.categories|length }})</span></h2>
+<div class="card">
+  {% if profile.categories %}
+  <table>
+    <tr><th>Category</th><th>Items</th><th>Accept rate</th><th>Pending</th></tr>
+    {% for c in profile.categories %}
+    <tr>
+      <td>{{ c.name }}</td>
+      <td>{{ c.count }}</td>
+      <td>
+        {% if c.accept_rate is not none %}
+        <span class="rate-bar"><span class="rate-bar-fill" style="width: {{ (c.accept_rate * 100)|round|int }}%"></span></span>
+        {{ (c.accept_rate * 100)|round|int }}% ({{ c.accepted }} accepted, {{ c.rejected }} rejected)
+        {% else %}
+        <span class="meta">not yet decided</span>
+        {% endif %}
+      </td>
+      <td>{{ c.pending }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+    <p class="empty">No items yet — drop an export and run a cycle.</p>
+  {% endif %}
+</div>
+
+<h2 class="section-title">Tags <span class="meta">({{ profile.tags|length }})</span></h2>
+<div class="card">
+  {% if profile.tags %}
+    {% for t in profile.tags %}<span class="badge">{{ t.tag }} &middot; {{ t.count }}</span>{% endfor %}
+  {% else %}
+    <p class="empty">No tags yet — generated once a plan is submitted.</p>
+  {% endif %}
+</div>
+
+<h2 class="section-title">Tags that cluster together <span class="meta">({{ profile.tag_cooccurrence|length }})</span></h2>
+<div class="card">
+  {% if profile.tag_cooccurrence %}
+  <table>
+    <tr><th>Tags</th><th>Seen together</th></tr>
+    {% for p in profile.tag_cooccurrence %}
+    <tr><td>{{ p.tags[0] }} + {{ p.tags[1] }}</td><td>{{ p.count }}</td></tr>
+    {% endfor %}
+  </table>
+  {% else %}
+    <p class="empty">No recurring tag pairs yet — a pair needs to show up together more than once.</p>
+  {% endif %}
+</div>
+
+</body>
+</html>
+"""
+
 
 def _exports_manifest() -> dict | None:
     if not exporter.EXPORTS_MANIFEST_FILE.exists():
@@ -1058,6 +1192,7 @@ def dashboard():
     return render_template_string(
         PAGE, plans=plans, run_state=_run_state, submit_state=_submit_state,
         current_policy=policy.load_current(), current_taxonomy=taxonomy.load_current(),
+        current_profile=profile.load_current(),
         session_log_tail=_session_log_tail(),
         latest_snapshot=snapshots[0] if snapshots else None,
         exports_manifest=_exports_manifest(),
@@ -1187,6 +1322,11 @@ def taxonomy_view():
     seeded = sorted(c for c in current["categories"] if c not in promoted_names)
     history = list(reversed(current.get("history", [])))  # newest promotion first
     return render_template_string(TAXONOMY_PAGE, version=current["version"], seeded=seeded, history=history)
+
+
+@app.route("/profile")
+def profile_view():
+    return render_template_string(PROFILE_PAGE, profile=profile.load_current())
 
 
 if __name__ == "__main__":

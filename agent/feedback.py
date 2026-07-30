@@ -11,7 +11,7 @@ fixes (a stale full-plans snapshot held across a slow reevaluation silently
 reverting other plans' concurrent changes).
 """
 
-from agent import exporter, publisher, reevaluator, session_log, store
+from agent import exporter, profile, publisher, reevaluator, session_log, store
 from agent.adapters import pioneer, vectorai
 
 DECISION_TO_STATUS = {
@@ -73,6 +73,11 @@ def record(plan_id: str, decision: str) -> dict:
     if decision in ("accept", "reject"):
         reevaluator.reevaluate_plan(plan_id)
         plan = store.load_plans().get(plan_id, plan)
+    # reevaluate_plan() above already recomputes the profile for accept/reject
+    # (ROADMAP.md §3) — this covers share/invite too, the one path that
+    # doesn't go through reevaluate_plan(). Cheap pure aggregation, so the
+    # redundant recompute on accept/reject costs nothing worth branching to avoid.
+    profile.recompute()
     return plan
 
 
@@ -122,6 +127,7 @@ def record_item(plan_id: str, href: str, decision: str) -> dict:
 
     publisher.render()
     exporter.render_all()
+    profile.recompute()  # per-item accept/reject is the most frequent state change (ROADMAP.md §3)
     return plan
 
 

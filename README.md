@@ -21,7 +21,8 @@ python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt mlx-lm torch transformers
 ```
 
-Open `http://127.0.0.1:5000` — upload a drop file, trigger a pass, give per-item feedback, and
+Open `
+` — upload a drop file, trigger a pass, give per-item feedback, and
 read `cited.md`, all from the browser. Full walkthrough: **[docs/DEMO.md](docs/DEMO.md)** §6.
 
 ## Stack

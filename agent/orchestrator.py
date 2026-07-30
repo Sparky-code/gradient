@@ -114,7 +114,7 @@ def build_default_coordinator() -> Coordinator:
     reclassify/planner/vectorai/taxonomy_evolver directly — is what let
     this fifth agent get added without loop.py's dispatch shape changing."""
     from agent import (
-        actionability, export_type_evolver, export_types, planner, policy,
+        actionability, export_type_evolver, export_types, planner, policy, profile,
         reclassify, tagger, taxonomy, taxonomy_evolver,
     )
     from agent.adapters import vectorai
@@ -272,6 +272,24 @@ def build_default_coordinator() -> Coordinator:
                     "current export type, checks it isn't already covered, grounds it against VectorAI "
                     "DB's own local memory, and auto-promotes a new versioned emergent export type if warranted.",
         handler=_export_type_evolve,
+    ))
+
+    def _profile(input: list[Message]) -> list[Message]:
+        # Ignores input — unlike every other agent here, this aggregates ALL
+        # plans.json state, not one drop file's posts, so there's nothing
+        # file-specific to pass in. Dispatched once at the end of run_once(),
+        # not per file (see loop.py).
+        result = profile.recompute()
+        return [Message(role="agent/profiler", parts=[
+            MessagePart(content=result, content_type="application/json"),
+        ])]
+
+    coordinator.register(AgentManifest(
+        name="profiler",
+        description="Aggregates plans.json into a self-profile — recurring categories, accept/reject "
+                    "rate per category, and tag co-occurrence — recomputed fresh from current state "
+                    "every time, not a promoted/versioned artifact like policy or taxonomy.",
+        handler=_profile,
     ))
 
     return coordinator
