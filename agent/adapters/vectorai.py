@@ -541,3 +541,28 @@ def top_k_anchors(
 ) -> list[dict]:
     """Single-text convenience wrapper around top_k_anchors_many()."""
     return top_k_anchors_many([text], k, min_score, exclude)[0]
+
+
+_ALL_COLLECTIONS = (
+    COLLECTION, TAXONOMY_CANDIDATES_COLLECTION, TAXONOMY_ANCHORS_COLLECTION,
+    EXPORT_TYPE_CANDIDATES_COLLECTION, EXPORT_TYPE_ANCHORS_COLLECTION,
+)
+
+
+def clear_all_collections() -> dict:
+    """Deletes every collection this adapter owns — episodic memory, taxonomy
+    candidates/anchors, export-type candidates/anchors — so a full local
+    reset (webui.py's /full-reset, see RUNBOOK.md) doesn't leave stale
+    embeddings from a prior experiment biasing recall/grounding/clustering on
+    the next pass. `strict=False` per collection means an already-missing
+    collection is a no-op, not an error. Degrades to a reported, non-fatal
+    result if VectorAI DB isn't reachable at all (container not running) —
+    same resilience contract as every other call in this module; the caller
+    (store.py's full_reset()) still wipes local JSON state either way."""
+    try:
+        with _client() as client:
+            for name in _ALL_COLLECTIONS:
+                client.collections.delete(name, strict=False)
+        return {"cleared": True, "collections": list(_ALL_COLLECTIONS), "reason": None}
+    except VectorAIError as e:
+        return {"cleared": False, "collections": [], "reason": str(e)}

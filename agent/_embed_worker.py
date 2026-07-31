@@ -20,6 +20,20 @@ import os
 import sys
 from pathlib import Path
 
+# Running this file as a script puts agent/ itself on sys.path[0], where its
+# own modules shadow same-named stdlib ones. agent/profile.py in particular
+# shadows stdlib `profile`, which cProfile imports, which torch/transformers
+# and mlx_lm pull in transitively — and agent/profile.py's own `from agent
+# import ...` then fails, because agent/ is on the path but the repo root
+# holding the `agent` package is not. transformers reports that as the
+# spectacularly unhelpful "Could not import module 'AutoModel'", and
+# vectorai.embed_batch() turns it into a silent None, which every caller
+# treats as "no embeddings this pass". Net effect: the whole vector layer
+# (grounding, recall, clustering, reassignment) degrades to a no-op with no
+# error anywhere. Point sys.path[0] at the repo root instead — the stdlib
+# wins again, and `agent` stays importable for the workers that want it.
+sys.path[0] = str(Path(__file__).resolve().parents[1])
+
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 

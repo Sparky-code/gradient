@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agent import config
+from agent.adapters import vectorai
 
 
 class _ProcessLock:
@@ -181,3 +182,53 @@ def restore_snapshot(snapshot_id: str) -> None:
                 shutil.copy2(src, dest)
             elif dest.exists():
                 dest.unlink()
+
+
+def full_reset() -> dict:
+    """Wipes ALL local state back to a fresh-install baseline, for running a
+    new experiment from scratch — not `/reset`'s "undo the last pass" (that
+    only restores the most recent snapshot). Clears: plans, cited.md, every
+    promoted policy/taxonomy/export-type/profile/source-trust artifact,
+    ingest bookkeeping (processed-files list, VectorAI-remembered hrefs,
+    training queue, retrain reports), the session log, every generated
+    export, and every VectorAI DB collection this project owns
+    (agent.adapters.vectorai.clear_all_collections()) — so stale embeddings
+    from the prior experiment don't bias recall/grounding/clustering on the
+    next pass. Every module that owns one of these files bootstraps cleanly
+    from an empty/missing state already (policy.py starts at version 0,
+    taxonomy.py/export_types.py reseed on the next real pass) — this doesn't
+    need to know any of their internals beyond "delete the directory."
+
+    Takes a snapshot first ("before full reset") — the one thing this does
+    NOT wipe is snapshot history itself, so triggering this by mistake is
+    still recoverable via the regular /reset, same as any other risky pass.
+
+    data/drop/'s uploaded export files are left untouched — deleting
+    processed_files.json (not the drop files themselves) means the very
+    next run picks the same input back up as if it were new, which is the
+    actual "iterate through the workflow" use case this exists for; a
+    person who wants genuinely different input still just uploads a new
+    file same as ever."""
+    snapshot("before full reset")
+
+    with PLANS_LOCK:
+        for f in (
+            config.PLANS_FILE, config.CITED_MD, config.PROCESSED_FILE,
+            config.TRAINING_QUEUE_FILE, config.VECTORAI_REMEMBERED_FILE,
+            config.SESSION_LOG_FILE, config.CITED_MD_HASH_FILE,
+        ):
+            f.unlink(missing_ok=True)
+
+        for d in (
+            config.STATE_DIR / "policy", config.STATE_DIR / "taxonomy",
+            config.STATE_DIR / "export_types", config.STATE_DIR / "profile",
+            config.STATE_DIR / "source_trust", config.RETRAIN_REPORTS_DIR,
+        ):
+            shutil.rmtree(d, ignore_errors=True)
+
+        from agent import exporter  # deferred: exporter.py imports store.py
+        shutil.rmtree(exporter.EXPORTS_DIR, ignore_errors=True)
+
+        config.ensure_dirs()
+
+    return {"vectorai": vectorai.clear_all_collections()}
